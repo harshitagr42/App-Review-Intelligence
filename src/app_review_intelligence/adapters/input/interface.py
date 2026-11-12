@@ -4,12 +4,12 @@ Example:
     from app_review_intelligence.adapters.input.interface import load_and_prepare
 
     model_records, evaluation_labels, metadata = load_and_prepare(
-        ["dataset/raw/campusconnect_1000_reviews.csv", "dataset/raw/tallyo_reviews.csv"]
+        ["dataset/processed/combined_reviews_output.csv"]
     )
-    model_records[0]      # {"review_id": "CC-0001", "review_text": "...", "review_date": "2026-07-21"}
-    evaluation_labels[0]  # {"review_id": "CC-0001", "gold_major_category": "...",
-                          #  "gold_minor_category": "...", "gold_sentiment": "Positive"}
-    metadata["rows_loaded"], metadata["rows_accepted"], metadata["duplicate_review_count"]
+    model_records[0]      # {"review_id": "1", "review_text": "...", "review_date": "2026-08-15"}
+    evaluation_labels[0]  # {"review_id": "1", "gold_major_category": "...",
+                          #  "gold_minor_category": "...", "gold_sentiment": "Negative"}
+    metadata["rows_loaded"], metadata["rows_accepted"]   # 2500, 1997
 """
 
 from app_review_intelligence.adapters.input.implementation import (

@@ -284,6 +284,10 @@ def test_team_combined_dataset_is_cleaned():
     records, labels, metadata = load_and_prepare([str(COMBINED)])
 
     assert metadata["rows_loaded"] == 2500
+    assert metadata["rows_accepted"] == 1997
+    assert metadata["rows_skipped_empty"] == 15
+    assert metadata["rows_skipped_invalid_date"] == 14
+    assert metadata["duplicate_review_count"] == 474
     assert all(r["review_text"] and r["review_date"] for r in records)
     keys = {(r["review_text"].casefold(), r["review_date"]) for r in records}
     assert len(keys) == len(records)
