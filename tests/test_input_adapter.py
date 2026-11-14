@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 
-from conftest import MAJOR_CATEGORIES, SENTIMENTS, get_component_function
+from conftest import COMBINED_DATASET, MAJOR_CATEGORIES, SENTIMENTS, get_component_function
 
 
 def test_load_and_prepare_returns_three_outputs(tmp_path):
@@ -20,7 +20,7 @@ def test_load_and_prepare_returns_three_outputs(tmp_path):
             "Date": "2026-07-21",
             "Major Class": "Performance and Stability",
             "Minor Class": "App Crashes",
-            "Sentiment": "negative",  # the dataset stores sentiment in lowercase
+            "Sentiment": "negative",
         }
     ])
 
@@ -41,7 +41,7 @@ def test_load_and_prepare_returns_three_outputs(tmp_path):
         "review_id": "1",
         "gold_major_category": "Performance and Stability",
         "gold_minor_category": "App Crashes",
-        "gold_sentiment": "Negative",  # normalised from "negative"
+        "gold_sentiment": "Negative",
     }
 
 
@@ -105,13 +105,17 @@ def test_duplicate_review_ids_are_rejected_or_corrected(tmp_path):
         },
     ]).to_csv(file_path, index=False)
 
-    try:
-        records, _, _ = load_and_prepare([str(file_path)])
-    except ValueError:
-        return
+    # Docs/05_DATA_SCHEMA.md section 8: a duplicate source ID gets a unique
+    # internal ID (<ID>_2, <ID>_3, ...) and the source ID is preserved.
+    records, labels, metadata = load_and_prepare([str(file_path)])
 
     ids = [record["review_id"] for record in records]
-    assert len(ids) == len(set(ids))
+    assert ids == ["1", "1_2"]
+    assert [label["review_id"] for label in labels] == ids
+    correction = metadata["id_corrections"][0]
+    assert correction["review_id"] == "1_2"
+    assert correction["source_review_id"] == "1"
+    assert metadata["warnings"]
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +303,10 @@ def test_team_combined_dataset_is_cleaned():
     keys = {(r["review_text"].casefold(), r["review_date"]) for r in records}
     assert len(keys) == len(records)
     assert [label["review_id"] for label in labels] == [r["review_id"] for r in records]
+    assert {label["gold_major_category"] for label in labels} == set(MAJOR_CATEGORIES)
+    assert {label["gold_sentiment"] for label in labels} == set(SENTIMENTS)
+    assert all(label["gold_minor_category"] for label in labels)
+    assert all(set(record) == {"review_id", "review_text", "review_date"} for record in records)
 
 
 @pytest.mark.skipif(not COMBINED.exists(), reason="local dataset not available")
@@ -317,3 +325,55 @@ def test_team_combined_dataset_labels_and_formats_match_the_dataset():
     assert all(label["gold_minor_category"] for label in labels)
     # Gold labels never reach the model-facing records.
     assert all(set(r) == {"review_id", "review_text", "review_date"} for r in records)
+
+
+def test_xlsx_worksheet_is_selected(tmp_path):
+    load_and_prepare = get_component_function(*LOAD)
+    path = tmp_path / "book.xlsx"
+    with pd.ExcelWriter(path) as writer:
+        pd.DataFrame([_row("A1", "From first sheet")]).to_excel(writer, sheet_name="First", index=False)
+        pd.DataFrame([_row("B1", "From second sheet")]).to_excel(writer, sheet_name="Second", index=False)
+
+    default_records, _, _ = load_and_prepare([str(path)])
+    chosen_records, _, metadata = load_and_prepare([str(path)], sheet_name="Second")
+
+    assert [r["review_id"] for r in default_records] == ["A1"]
+    assert [r["review_id"] for r in chosen_records] == ["B1"]
+    assert metadata["input_files"][0]["sheet_name"] == "Second"
+
+
+def test_missing_worksheet_fails(tmp_path):
+    load_and_prepare = get_component_function(*LOAD)
+    path = tmp_path / "book.xlsx"
+    pd.DataFrame([_row("A1", "text")]).to_excel(path, sheet_name="Only", index=False)
+
+    with pytest.raises(ValueError):
+        load_and_prepare([str(path)], sheet_name="Missing")
+
+
+def test_emoji_and_negation_are_preserved(tmp_path):
+    load_and_prepare = get_component_function(*LOAD)
+    path = _write_csv(tmp_path / "e.csv", [
+        _row("1", "I don't like the new update 😡"),
+        _row("2", "Not bad, but never loads on time!!! 👍"),
+    ])
+
+    records, _, _ = load_and_prepare([path])
+
+    assert [r["review_text"] for r in records] == [
+        "I don't like the new update 😡",
+        "Not bad, but never loads on time!!! 👍",
+    ]
+
+
+def test_gold_label_columns_never_reach_model_records(tmp_path):
+    load_and_prepare = get_component_function(*LOAD)
+    path = _write_csv(tmp_path / "g.csv", [_row("1", "Slow app", major="Performance and Stability",
+                                                 minor="Slow Loading", sentiment="negative")])
+
+    records, _, _ = load_and_prepare([path])
+
+    values = " ".join(str(v) for v in records[0].values())
+    assert "Performance and Stability" not in values
+    assert "Slow Loading" not in values
+    assert "negative" not in values.lower()

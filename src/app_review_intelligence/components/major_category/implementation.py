@@ -68,11 +68,14 @@ def load_category_config(config_path=None):
     if not isinstance(threshold, (int, float)) or not 0 < threshold <= 1:
         raise ValueError(f"{path}: 'min_similarity' must be a number in (0, 1]")
 
-    cleaned, seen = [], set()
+    cleaned, seen, other_entry = [], set(), None
     for entry in categories:
         name = entry.get("name") if isinstance(entry, dict) else None
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}: every category needs a non-empty 'name'")
+        if name == other and other_entry is None:
+            other_entry = entry  # "Other" is listed in the taxonomy; its examples compete as "Other"
+            continue
         if name in seen or name == other:
             raise ValueError(f"{path}: duplicate or reserved category name {name!r}")
         seen.add(name)
@@ -108,6 +111,10 @@ def load_category_config(config_path=None):
         smoothing = {"neighbors": neighbors, "weight": float(weight)}
 
     other_examples = raw.get("other_examples")
+    if other_entry is not None:
+        if other_examples is not None:
+            raise ValueError(f"{path}: give the 'Other' examples under its category entry, not 'other_examples'")
+        other_examples = other_entry.get("examples") or None
     if other_examples is not None:
         if not isinstance(other_examples, list) or not other_examples:
             raise ValueError(f"{path}: 'other_examples' must be a non-empty list of texts")
