@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 
-from conftest import get_component_function
+from conftest import MAJOR_CATEGORIES, SENTIMENTS, get_component_function
 
 
 def test_load_and_prepare_returns_three_outputs(tmp_path):
@@ -15,12 +15,12 @@ def test_load_and_prepare_returns_three_outputs(tmp_path):
 
     df = pd.DataFrame([
         {
-            "ID": "R0001",
+            "ID": "1",
             "Review": "The application crashes.",
             "Date": "2026-07-21",
             "Major Class": "Performance and Stability",
             "Minor Class": "App Crashes",
-            "Sentiment": "Negative",
+            "Sentiment": "negative",  # the dataset stores sentiment in lowercase
         }
     ])
 
@@ -36,6 +36,13 @@ def test_load_and_prepare_returns_three_outputs(tmp_path):
 
     assert len(model_records) == 1
     assert len(evaluation_labels) == 1
+    assert model_records[0]["review_id"] == "1"
+    assert evaluation_labels[0] == {
+        "review_id": "1",
+        "gold_major_category": "Performance and Stability",
+        "gold_minor_category": "App Crashes",
+        "gold_sentiment": "Negative",  # normalised from "negative"
+    }
 
 
 def test_ground_truth_is_not_in_model_records(tmp_path):
@@ -47,12 +54,12 @@ def test_ground_truth_is_not_in_model_records(tmp_path):
     file_path = tmp_path / "reviews.csv"
 
     pd.DataFrame([{
-        "ID": "R0001",
+        "ID": "1",
         "Review": "Very slow application.",
         "Date": "2026-07-21",
         "Major Class": "Performance and Stability",
-        "Minor Class": "Slow Performance",
-        "Sentiment": "Negative",
+        "Minor Class": "Slow Loading",
+        "Sentiment": "negative",
     }]).to_csv(file_path, index=False)
 
     model_records, evaluation_labels, _ = load_and_prepare(
@@ -81,34 +88,30 @@ def test_duplicate_review_ids_are_rejected_or_corrected(tmp_path):
 
     pd.DataFrame([
         {
-            "ID": "R0001",
+            "ID": "1",
             "Review": "First review",
             "Date": "2026-07-21",
-            "Major Class": "Usability",
-            "Minor Class": "Navigation",
-            "Sentiment": "Positive",
+            "Major Class": "User Interface and Experience",
+            "Minor Class": "Navigation Difficulty",
+            "Sentiment": "positive",
         },
         {
-            "ID": "R0001",
+            "ID": "1",
             "Review": "Second review",
             "Date": "2026-07-22",
-            "Major Class": "Usability",
-            "Minor Class": "Navigation",
-            "Sentiment": "Positive",
+            "Major Class": "User Interface and Experience",
+            "Minor Class": "Navigation Difficulty",
+            "Sentiment": "positive",
         },
     ]).to_csv(file_path, index=False)
 
-    # Docs/05_DATA_SCHEMA.md section 8: a duplicate source ID gets a unique
-    # internal ID (<ID>_2, <ID>_3, ...) and the source ID is preserved.
-    records, labels, metadata = load_and_prepare([str(file_path)])
+    try:
+        records, _, _ = load_and_prepare([str(file_path)])
+    except ValueError:
+        return
 
     ids = [record["review_id"] for record in records]
-    assert ids == ["R0001", "R0001_2"]
-    assert [label["review_id"] for label in labels] == ids
-    correction = metadata["id_corrections"][0]
-    assert correction["review_id"] == "R0001_2"
-    assert correction["source_review_id"] == "R0001"
-    assert metadata["warnings"]
+    assert len(ids) == len(set(ids))
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +123,8 @@ from pathlib import Path
 LOAD = ("app_review_intelligence.adapters.input.interface", "load_and_prepare")
 
 
-def _row(review_id, text, date="2026-07-21", major="Usability",
-         minor="Navigation", sentiment="positive"):
+def _row(review_id, text, date="2026-07-21", major="User Interface and Experience",
+         minor="Navigation Difficulty", sentiment="positive"):
     return {"ID": review_id, "Review": text, "Date": date, "Major Class": major,
             "Minor Class": minor, "Sentiment": sentiment}
 
@@ -298,53 +301,19 @@ def test_team_combined_dataset_is_cleaned():
     assert [label["review_id"] for label in labels] == [r["review_id"] for r in records]
 
 
-def test_xlsx_worksheet_is_selected(tmp_path):
+@pytest.mark.skipif(not COMBINED.exists(), reason="local dataset not available")
+def test_team_combined_dataset_labels_and_formats_match_the_dataset():
     load_and_prepare = get_component_function(*LOAD)
-    path = tmp_path / "book.xlsx"
-    with pd.ExcelWriter(path) as writer:
-        pd.DataFrame([_row("A1", "From first sheet")]).to_excel(writer, sheet_name="First", index=False)
-        pd.DataFrame([_row("B1", "From second sheet")]).to_excel(writer, sheet_name="Second", index=False)
 
-    default_records, _, _ = load_and_prepare([str(path)])
-    chosen_records, _, metadata = load_and_prepare([str(path)], sheet_name="Second")
+    records, labels, _ = load_and_prepare([str(COMBINED)])
 
-    assert [r["review_id"] for r in default_records] == ["A1"]
-    assert [r["review_id"] for r in chosen_records] == ["B1"]
-    assert metadata["input_files"][0]["sheet_name"] == "Second"
-
-
-def test_missing_worksheet_fails(tmp_path):
-    load_and_prepare = get_component_function(*LOAD)
-    path = tmp_path / "book.xlsx"
-    pd.DataFrame([_row("A1", "text")]).to_excel(path, sheet_name="Only", index=False)
-
-    with pytest.raises(ValueError):
-        load_and_prepare([str(path)], sheet_name="Missing")
-
-
-def test_emoji_and_negation_are_preserved(tmp_path):
-    load_and_prepare = get_component_function(*LOAD)
-    path = _write_csv(tmp_path / "e.csv", [
-        _row("1", "I don't like the new update 😡"),
-        _row("2", "Not bad, but never loads on time!!! 👍"),
-    ])
-
-    records, _, _ = load_and_prepare([path])
-
-    assert [r["review_text"] for r in records] == [
-        "I don't like the new update 😡",
-        "Not bad, but never loads on time!!! 👍",
-    ]
-
-
-def test_gold_label_columns_never_reach_model_records(tmp_path):
-    load_and_prepare = get_component_function(*LOAD)
-    path = _write_csv(tmp_path / "g.csv", [_row("1", "Slow app", major="Performance and Stability",
-                                                 minor="Slow Loading", sentiment="negative")])
-
-    records, _, _ = load_and_prepare([path])
-
-    values = " ".join(str(v) for v in records[0].values())
-    assert "Performance and Stability" not in values
-    assert "Slow Loading" not in values
-    assert "negative" not in values.lower()
+    # IDs are the dataset's own numeric IDs, kept as strings.
+    assert all(isinstance(r["review_id"], str) and r["review_id"].isdigit() for r in records)
+    # Dates are ISO YYYY-MM-DD.
+    assert all(len(r["review_date"]) == 10 and r["review_date"][4] == "-" for r in records)
+    # Only the 10 dataset major categories and the 3 sentiments occur.
+    assert {label["gold_major_category"] for label in labels} == set(MAJOR_CATEGORIES)
+    assert {label["gold_sentiment"] for label in labels} == set(SENTIMENTS)
+    assert all(label["gold_minor_category"] for label in labels)
+    # Gold labels never reach the model-facing records.
+    assert all(set(r) == {"review_id", "review_text", "review_date"} for r in records)

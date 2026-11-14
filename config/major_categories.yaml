@@ -1,0 +1,142 @@
+# Major-category definitions. Names match the dataset's `Major Class` labels exactly.
+# "Other" is a real dataset label. It is the fallback AND (via `other_examples`) a category that competes.
+# Categories describe the TOPIC, not the sentiment (the dataset mixes praise and complaints).
+# All examples are hand-written paraphrases, not copies of dataset reviews.
+
+min_similarity: 0.25       # best score below this -> "Other". Re-tune if you change the model.
+other_category: Other
+model: sentence-transformers/all-mpnet-base-v2
+scoring: top2
+sentence_level: true
+smoothing: {neighbors: 10, weight: 0.8}
+other_bias: -0.12         # added to the "Other" score; negative = Other must be a clearer match. Re-tune with the script.
+
+# "Other" competes as a real category: generic praise, vague feedback, wrong or outdated information,
+# suggestions for brand-new features, comparisons with other apps, and spam.
+other_examples:
+  - "Overall a good app, the developers are doing well."
+  - "Great app, it makes my day easier."
+  - "I am disappointed, the quality has dropped over time."
+  - "It is an average app that does what I need most of the time."
+  - "For the university's own app I was hoping for something more reliable overall."
+  - "The university needs to look after this app more regularly."
+  - "Having every campus service together in a single place is handy."
+  - "Adding a way to rate or comment on every page would help us report issues."
+  - "I wish the app could show live shuttle locations around campus."
+  - "Reserving a study desk at the library from inside the app would be great."
+  - "The contact details and office timings shown for my department are outdated."
+  - "Some posted information is inaccurate, such as an incorrect enrolment cut-off day."
+  - "Other apps do this better and cheaper, why would I pay when free alternatives exist?"
+  - "It seems like a weaker clone of competing apps."
+  - "Win free coins now, tap the link on my profile."
+  - "Amazing offer! Open my website to get discounts."
+  - "Good app. Does anyone know if it will rain tomorrow?"
+
+categories:
+  - name: "Performance and Stability"
+    description: "App speed, crashes, freezing, force close, slow loading, lag, server downtime or outages, high battery, memory or mobile data usage, and data not syncing or backing up reliably."
+    examples:
+      - "The app keeps crashing and force closes when I open it."
+      - "Loading is painfully slow and the screen freezes."
+      - "The servers are down and nothing loads."
+      - "It drains my battery and uses too much mobile data."
+      - "It uses a lot of memory and makes my phone hot."
+      - "My data fails to sync and my changes are lost between devices."
+      - "The app became much faster and smoother after the update."
+      - "The app lags and hangs every time I switch screens."
+  - name: "Features and Functionality"
+    description: "A specific feature that is missing, broken or calculates wrongly: timetable or class schedule data, attendance records and percentages, assignment deadlines, exporting or downloading documents, receipts and PDFs, reports and spending charts, bank or calendar integrations, recurring entries, split bills and balances."
+    examples:
+      - "The timetable still shows old room changes and the class schedule is outdated."
+      - "My attendance figures remain wrong even after the teacher fixes the entry."
+      - "I cannot save or download my exam schedule or receipt as a PDF."
+      - "Charts cannot filter by date range and I cannot compare months."
+      - "Importing transactions from my bank does not work and the calendar cannot be linked."
+      - "Please add recurring expenses, that feature is missing."
+      - "After I record a repayment the amount owed does not go down."
+      - "Scanning a bill picks up incorrect totals."
+      - "It would help to see every coursework item and due date on one screen."
+      - "I would like to download my records as a spreadsheet file."
+      - "Fee receipts and downloaded documents fail to open or are blank."
+      - "There is no direct connection to payment services like PayPal or UPI."
+      - "Changes to my lecture timings never appear in the app."
+      - "Dividing a bill by percentages gives rounding errors, so the sums are off."
+      - "Routine study-related jobs still force me to open other websites."
+  - name: "Billing and Payments"
+    description: "Money charged to the user: payment declined or failing, payment methods not supported, double or unexpected charges, refunds that are pending or refused, subscription price, plan and discount problems."
+    examples:
+      - "The bank accepts my card elsewhere yet the app refuses the payment."
+      - "I was charged twice, an unexpected charge appeared."
+      - "My refund is still pending after weeks."
+      - "The subscription price changed and the annual plan discount is gone."
+      - "The transaction failed but the money left my account."
+      - "The app does not accept my payment method or wallet."
+      - "The refund request was rejected."
+  - name: "Authentication and Account Access"
+    description: "Logging in and out, sign up, invalid credentials, password reset, OTP or verification code not arriving, two-factor authentication, account lockout, session expiry, Google or social sign-in."
+    examples:
+      - "Sign-in is rejected as incorrect details even though I typed the right password."
+      - "The OTP code never arrives by SMS."
+      - "Too many wrong tries and I am shut out of my account."
+      - "The password reset email works but the new password is rejected."
+      - "I keep getting logged out because my session expires too fast."
+      - "Two-factor authentication does not work."
+      - "Signing in through my Google account never works."
+      - "The app logs me out while I am filling in a long form or after sitting idle."
+  - name: "User Interface and Experience"
+    description: "How the app looks and is navigated: visual design, cluttered or crowded layout, too many taps to find a page, dark mode and theme, text size, screen reader and colour-blind accessibility, onboarding, tooltips and tutorials."
+    examples:
+      - "The dashboard and home screen are cluttered and crowded."
+      - "Even with my phone set to a dark appearance the app remains light."
+      - "Screen reader cannot read the fields and the text is too small."
+      - "The onboarding and tooltips are confusing and vanish too fast."
+      - "The new redesign looks childish and ugly."
+      - "I cannot find the page I need, navigation takes too many taps."
+      - "The design is clean and everything is easy to find."
+      - "The colour coding is confusing and the buttons are too small to tap."
+      - "The setup walkthrough skipped steps and the new bottom bar moved the reports."
+  - name: "Customer Support"
+    description: "The help team and help resources: slow or no replies, canned or unhelpful answers, tickets closed or unresolved, help centre guides and FAQ, only one contact channel, who can reach support."
+    examples:
+      - "Support has not replied to my ticket for days and only sends auto replies."
+      - "They sent the same canned answer and nobody understood my issue."
+      - "The case was shut by the agent although nothing had been fixed."
+      - "The only way to reach the team is a mail form, with no calling or live messaging."
+      - "The FAQ and help centre guide does not cover this problem."
+      - "I cannot attach screenshots when contacting support."
+      - "The help team solved my issue quickly and politely."
+  - name: "Privacy and Security"
+    description: "Personal data and safety: excessive permissions, vague privacy policy, data sharing with advertisers, data deletion or export requests, data leaks and breach fears, spam after sharing details, unauthorized login or account access, security vulnerabilities."
+    examples:
+      - "The app asks for too many permissions that it does not need."
+      - "The terms do not clearly explain which third parties receive my information."
+      - "I asked for my data to be deleted and it is still there."
+      - "I am worried about a data leak or breach."
+      - "I was warned about a sign-in from a device that is not mine."
+      - "Logging out on another device does not end the old session, which is unsafe."
+      - "It is good that I can easily manage what personal data is kept."
+      - "Anyone holding a group invite link could see my financial details."
+      - "Ads based on my spending feel invasive, and it wants my contacts and location."
+      - "Too much of my personal student record is visible to others in the app."
+      - "Even after closing my account I keep getting messages from them."
+      - "Biometric lock and new-device verification make me feel protected."
+  - name: "Notifications"
+    description: "Push notifications and alerts that are missing, late, duplicated or too frequent, notification settings and controls, muting categories, and what a notification says or opens."
+    examples:
+      - "I am not receiving any notifications."
+      - "Deadline alerts arrive too late or after the deadline."
+      - "I get the same notification twice."
+      - "Too many notifications every day."
+      - "I cannot mute promotional announcements or choose which alerts I get."
+      - "Pressing an alert takes me to an unrelated screen, and its message is confusing."
+  - name: "Compatibility"
+    description: "Whether the app works on a particular device, operating system, screen, browser or language: tablets, specific phone models, older or new iOS and Android versions, small screens and layouts cut off, web portal and browsers, no desktop app, English only and regional date formats."
+    examples:
+      - "It crashes or breaks only on my tablet or my specific phone model."
+      - "The app will not open on my older Android version or the new iOS release."
+      - "The layout is cut off and cramped on a small screen."
+      - "The web portal fails in my browser and the web version is limited."
+      - "There is no dedicated desktop app."
+      - "It is only available in English and shows dates in a format I do not use."
+      - "On my handset an on-screen control is partly hidden."
+      - "The in-app browser page for fees loads as an empty white screen."
