@@ -86,6 +86,18 @@ def test_priority_returns_one_result_per_subcategory():
     assert sorted(r["subcategory_id"] for r in result) == ["PERF_001", "PERF_002"]
 
 
+def test_priority_returns_list():
+    calculate_priorities = get_component_function(*CALCULATE)
+    subcategories, sentiments = _build([
+        ("PERF_001", "Performance and Stability", [("1", "Negative"), ("2", "Negative")]),
+    ])
+
+    result = calculate_priorities(subcategories, sentiments)
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+
+
 def test_priority_output_structure():
     calculate_priorities = get_component_function(*CALCULATE)
     subcategories, sentiments = _build([

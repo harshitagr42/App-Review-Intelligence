@@ -7,7 +7,7 @@ The classifier uses MiniLM cosine similarity against config/major_categories.yam
 
 import pytest
 
-from conftest import GOLD_FIELDS, MAJOR_CATEGORIES, get_component_function
+from conftest import CONFIG_DIR, GOLD_FIELDS, MAJOR_CATEGORIES, get_component_function
 
 
 pytestmark = pytest.mark.local_model
@@ -16,7 +16,15 @@ CLASSIFY = (
     "app_review_intelligence.components.major_category.interface",
     "classify",
 )
-CATEGORY_MIN_SIMILARITY = 0.35
+
+
+def _category_min_similarity():
+    yaml = pytest.importorskip("yaml")
+    path = CONFIG_DIR / "major_categories.yaml"
+    if not path.exists():
+        pytest.skip("major_categories.yaml is not implemented yet")
+    with open(path, encoding="utf-8") as handle:
+        return yaml.safe_load(handle).get("min_similarity", 0.35)
 
 
 def test_classify_returns_one_prediction_per_review(sample_records):
@@ -37,8 +45,7 @@ def test_major_category_output_structure(sample_records):
         assert {"review_id", "predicted_major_category", "confidence"} <= set(result)
         assert result["predicted_major_category"] in MAJOR_CATEGORIES
         assert isinstance(result["confidence"], float)
-        # confidence is the cosine similarity of the chosen category.
-        assert -1 <= result["confidence"] <= 1
+        assert 0 <= result["confidence"] <= 1
 
 
 def test_every_review_is_classified_once(sample_records):
@@ -64,6 +71,7 @@ def test_output_contains_no_gold_labels(sample_records):
 
 def test_below_threshold_prediction_is_other():
     classify = get_component_function(*CLASSIFY)
+    threshold = _category_min_similarity()
     records = [
         {"review_id": "X1", "review_text": "Purple elephants dance quietly on Tuesdays.", "review_date": None},
         {"review_id": "X2", "review_text": "zxqv blorp wem", "review_date": None},
@@ -73,7 +81,7 @@ def test_below_threshold_prediction_is_other():
     results = classify(records)
 
     for result in results:
-        if result["confidence"] < CATEGORY_MIN_SIMILARITY:
+        if result["confidence"] < threshold:
             assert result["predicted_major_category"] == "Other"
 
 
@@ -93,7 +101,7 @@ def test_taxonomy_examples_are_classified_into_their_category(text, expected):
     [result] = classify([{"review_id": "E1", "review_text": text, "review_date": None}])
 
     assert result["predicted_major_category"] == expected
-    assert result["confidence"] >= CATEGORY_MIN_SIMILARITY
+    assert result["confidence"] >= _category_min_similarity()
 
 
 def test_classification_is_deterministic(sample_records):

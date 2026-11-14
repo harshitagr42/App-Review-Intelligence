@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 
-from conftest import get_component_function
+from conftest import COMBINED_DATASET, MAJOR_CATEGORIES, SENTIMENTS, get_component_function
 
 
 def test_load_and_prepare_returns_three_outputs(tmp_path):
@@ -15,12 +15,12 @@ def test_load_and_prepare_returns_three_outputs(tmp_path):
 
     df = pd.DataFrame([
         {
-            "ID": "R0001",
+            "ID": "1",
             "Review": "The application crashes.",
             "Date": "2026-07-21",
             "Major Class": "Performance and Stability",
             "Minor Class": "App Crashes",
-            "Sentiment": "Negative",
+            "Sentiment": "negative",
         }
     ])
 
@@ -36,6 +36,13 @@ def test_load_and_prepare_returns_three_outputs(tmp_path):
 
     assert len(model_records) == 1
     assert len(evaluation_labels) == 1
+    assert model_records[0]["review_id"] == "1"
+    assert evaluation_labels[0] == {
+        "review_id": "1",
+        "gold_major_category": "Performance and Stability",
+        "gold_minor_category": "App Crashes",
+        "gold_sentiment": "Negative",
+    }
 
 
 def test_ground_truth_is_not_in_model_records(tmp_path):
@@ -47,12 +54,12 @@ def test_ground_truth_is_not_in_model_records(tmp_path):
     file_path = tmp_path / "reviews.csv"
 
     pd.DataFrame([{
-        "ID": "R0001",
+        "ID": "1",
         "Review": "Very slow application.",
         "Date": "2026-07-21",
         "Major Class": "Performance and Stability",
-        "Minor Class": "Slow Performance",
-        "Sentiment": "Negative",
+        "Minor Class": "Slow Loading",
+        "Sentiment": "negative",
     }]).to_csv(file_path, index=False)
 
     model_records, evaluation_labels, _ = load_and_prepare(
@@ -81,20 +88,20 @@ def test_duplicate_review_ids_are_rejected_or_corrected(tmp_path):
 
     pd.DataFrame([
         {
-            "ID": "R0001",
+            "ID": "1",
             "Review": "First review",
             "Date": "2026-07-21",
-            "Major Class": "Usability",
-            "Minor Class": "Navigation",
-            "Sentiment": "Positive",
+            "Major Class": "User Interface and Experience",
+            "Minor Class": "Navigation Difficulty",
+            "Sentiment": "positive",
         },
         {
-            "ID": "R0001",
+            "ID": "1",
             "Review": "Second review",
             "Date": "2026-07-22",
-            "Major Class": "Usability",
-            "Minor Class": "Navigation",
-            "Sentiment": "Positive",
+            "Major Class": "User Interface and Experience",
+            "Minor Class": "Navigation Difficulty",
+            "Sentiment": "positive",
         },
     ]).to_csv(file_path, index=False)
 
@@ -103,11 +110,11 @@ def test_duplicate_review_ids_are_rejected_or_corrected(tmp_path):
     records, labels, metadata = load_and_prepare([str(file_path)])
 
     ids = [record["review_id"] for record in records]
-    assert ids == ["R0001", "R0001_2"]
+    assert ids == ["1", "1_2"]
     assert [label["review_id"] for label in labels] == ids
     correction = metadata["id_corrections"][0]
-    assert correction["review_id"] == "R0001_2"
-    assert correction["source_review_id"] == "R0001"
+    assert correction["review_id"] == "1_2"
+    assert correction["source_review_id"] == "1"
     assert metadata["warnings"]
 
 
@@ -120,8 +127,8 @@ from pathlib import Path
 LOAD = ("app_review_intelligence.adapters.input.interface", "load_and_prepare")
 
 
-def _row(review_id, text, date="2026-07-21", major="Usability",
-         minor="Navigation", sentiment="positive"):
+def _row(review_id, text, date="2026-07-21", major="User Interface and Experience",
+         minor="Navigation Difficulty", sentiment="positive"):
     return {"ID": review_id, "Review": text, "Date": date, "Major Class": major,
             "Minor Class": minor, "Sentiment": sentiment}
 
@@ -296,6 +303,28 @@ def test_team_combined_dataset_is_cleaned():
     keys = {(r["review_text"].casefold(), r["review_date"]) for r in records}
     assert len(keys) == len(records)
     assert [label["review_id"] for label in labels] == [r["review_id"] for r in records]
+    assert {label["gold_major_category"] for label in labels} == set(MAJOR_CATEGORIES)
+    assert {label["gold_sentiment"] for label in labels} == set(SENTIMENTS)
+    assert all(label["gold_minor_category"] for label in labels)
+    assert all(set(record) == {"review_id", "review_text", "review_date"} for record in records)
+
+
+@pytest.mark.skipif(not COMBINED.exists(), reason="local dataset not available")
+def test_team_combined_dataset_labels_and_formats_match_the_dataset():
+    load_and_prepare = get_component_function(*LOAD)
+
+    records, labels, _ = load_and_prepare([str(COMBINED)])
+
+    # IDs are the dataset's own numeric IDs, kept as strings.
+    assert all(isinstance(r["review_id"], str) and r["review_id"].isdigit() for r in records)
+    # Dates are ISO YYYY-MM-DD.
+    assert all(len(r["review_date"]) == 10 and r["review_date"][4] == "-" for r in records)
+    # Only the 10 dataset major categories and the 3 sentiments occur.
+    assert {label["gold_major_category"] for label in labels} == set(MAJOR_CATEGORIES)
+    assert {label["gold_sentiment"] for label in labels} == set(SENTIMENTS)
+    assert all(label["gold_minor_category"] for label in labels)
+    # Gold labels never reach the model-facing records.
+    assert all(set(r) == {"review_id", "review_text", "review_date"} for r in records)
 
 
 def test_xlsx_worksheet_is_selected(tmp_path):

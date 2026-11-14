@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "app-review-intelligence"
 version = "0.1.0"
 description = "Local CLI that classifies app reviews and prioritises the issues they raise."
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.12,<3.14"
 # Primary dependencies fixed by Docs/02_TECHNICAL_REQUIREMENTS.md, section 2.
 # Do not add LangChain, LlamaIndex, a vector DB, a web framework, Docker
 # or a local clustering library.
