@@ -27,8 +27,20 @@ CATEGORY_CODES = {
     "Privacy and Security": "PRIV",
     "User Interface and Experience": "UIUX",
 }
-MAJOR_CATEGORIES = set(CATEGORY_CODES)
-SENTIMENT_LABELS = {"Positive", "Negative", "Neutral"}
+MAJOR_CATEGORIES = (
+    "Performance and Stability",
+    "Features and Functionality",
+    "Billing and Payments",
+    "Authentication and Account Access",
+    "User Interface and Experience",
+    "Customer Support",
+    "Privacy and Security",
+    "Notifications",
+    "Compatibility",
+    "Other",
+)
+SENTIMENTS = ("Positive", "Negative", "Neutral")
+SENTIMENT_LABELS = set(SENTIMENTS)
 GOLD_FIELDS = {"gold_major_category", "gold_minor_category", "gold_sentiment"}
 UNASSIGNED = "UNASSIGNED"
 FAKE_API_KEY = "test-key-NOT-A-REAL-KEY-7f3a9c"
@@ -38,18 +50,18 @@ FAKE_API_KEY = "test-key-NOT-A-REAL-KEY-7f3a9c"
 def sample_records():
     return [
         {
-            "review_id": "R0001",
-            "review_text": "The app crashes whenever I try to log in.",
+            "review_id": "1",
+            "review_text": "The app keeps crashing every time I open my timetable. Really frustrating.",
             "review_date": "2026-07-21",
         },
         {
-            "review_id": "R0002",
+            "review_id": "2",
             "review_text": "Excellent app. Very easy to use.",
             "review_date": "2026-07-22",
         },
         {
-            "review_id": "R0003",
-            "review_text": "The latest update made the app extremely slow.",
+            "review_id": "3",
+            "review_text": "Since the latest update, loading is extremely slow. Please fix this.",
             "review_date": "2026-07-23",
         },
     ]
@@ -59,21 +71,21 @@ def sample_records():
 def sample_labels():
     return [
         {
-            "review_id": "R0001",
+            "review_id": "1",
             "gold_major_category": "Performance and Stability",
             "gold_minor_category": "App Crashes",
             "gold_sentiment": "Negative",
         },
         {
-            "review_id": "R0002",
-            "gold_major_category": "User Interface and Experience",
-            "gold_minor_category": "Easy to Use",
+            "review_id": "2",
+            "gold_major_category": "Other",
+            "gold_minor_category": "General Praise",
             "gold_sentiment": "Positive",
         },
         {
-            "review_id": "R0003",
+            "review_id": "3",
             "gold_major_category": "Performance and Stability",
-            "gold_minor_category": "Slow Performance",
+            "gold_minor_category": "Slow Loading",
             "gold_sentiment": "Negative",
         },
     ]

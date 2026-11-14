@@ -25,7 +25,7 @@ jobs:
         run: |
            python -m pip install --upgrade pip
            # If your dependencies are listed in pyproject.toml
-           pip install .
+           pip install . --extra-index-url https://download.pytorch.org/whl/cpu
            # Or if you want to ensure requirements are met, explicitly install them or use:
            pip install pandas pytest
 

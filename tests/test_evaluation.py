@@ -31,10 +31,10 @@ GOLD = [
     # review_id, gold major, gold minor, gold sentiment (lowercase, as in the dataset file)
     ("1", "Performance and Stability", "App Crashes", "negative"),
     ("2", "Performance and Stability", "App Crashes", "negative"),
-    ("3", "User Interface and Experience", "Confusing Navigation", "neutral"),
-    ("4", "Billing and Payments", "Double Charge", "negative"),
-    ("5", "Billing and Payments", "Double Charge", "negative"),
-    ("6", "Billing and Payments", "Refund Delay", "positive"),
+    ("3", "User Interface and Experience", "Navigation Confusion", "neutral"),
+    ("4", "Billing and Payments", "Duplicate Charges", "negative"),
+    ("5", "Billing and Payments", "Duplicate Charges", "negative"),
+    ("6", "Billing and Payments", "Refund Delays", "positive"),
 ]
 PRED_MAJOR = [
     "Performance and Stability",
@@ -82,19 +82,19 @@ def test_evaluation_returns_metrics(sample_labels):
     evaluate = get_component_function(*EVALUATE)
 
     major = [
-        {"review_id": "R0001", "predicted_major_category": "Performance and Stability"},
-        {"review_id": "R0002", "predicted_major_category": "User Interface and Experience"},
-        {"review_id": "R0003", "predicted_major_category": "Performance and Stability"},
+        {"review_id": "1", "predicted_major_category": "Performance and Stability"},
+        {"review_id": "2", "predicted_major_category": "User Interface and Experience"},
+        {"review_id": "3", "predicted_major_category": "Performance and Stability"},
     ]
     sentiment = [
-        {"review_id": "R0001", "sentiment": "Negative"},
-        {"review_id": "R0002", "sentiment": "Positive"},
-        {"review_id": "R0003", "sentiment": "Negative"},
+        {"review_id": "1", "sentiment": "Negative"},
+        {"review_id": "2", "sentiment": "Positive"},
+        {"review_id": "3", "sentiment": "Negative"},
     ]
     assignments = [
-        {"review_id": "R0001", "subcategory_id": "PERF_001"},
-        {"review_id": "R0002", "subcategory_id": "UIUX_001"},
-        {"review_id": "R0003", "subcategory_id": "PERF_002"},
+        {"review_id": "1", "subcategory_id": "PERF_001"},
+        {"review_id": "2", "subcategory_id": "UIUX_001"},
+        {"review_id": "3", "subcategory_id": "PERF_002"},
     ]
 
     result = evaluate(major, sentiment, assignments, sample_labels)
@@ -156,6 +156,16 @@ def test_subcategory_metrics_are_never_called_accuracy():
     result = evaluate(*_inputs())
 
     assert not any("accuracy" in key.lower() for key in _all_keys(result["subcategory"]))
+
+
+def test_subcategory_is_scored_with_clustering_metrics_not_accuracy():
+    evaluate = get_component_function(*EVALUATE)
+
+    result = evaluate(*_inputs())
+
+    # Discovered subcategories have no fixed names, so they are scored with
+    # clustering metrics (ARI/AMI/NMI/V-measure) and never called "accuracy".
+    assert "accuracy" not in result["subcategory"]
 
 
 def test_unassigned_reviews_are_counted():

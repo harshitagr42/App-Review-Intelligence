@@ -112,6 +112,19 @@ def test_every_review_is_assigned_or_explicitly_unassigned(fake_gemini):
     _assert_every_review_exactly_once(records, result)
 
 
+def test_assignments_reference_existing_subcategories(fake_gemini):
+    discover = get_component_function(*DISCOVER)
+    records = _records(3)
+    fake_gemini(records)
+
+    result = discover(records)
+
+    valid_subcategory_ids = {sub["subcategory_id"] for sub in result["subcategories"]}
+    for assignment in result["assignments"]:
+        subcategory_id = assignment["subcategory_id"]
+        assert subcategory_id == UNASSIGNED or subcategory_id in valid_subcategory_ids
+
+
 def test_subcategory_records_have_required_fields_and_ids(fake_gemini):
     discover = get_component_function(*DISCOVER)
     records = _records(3) + _records(2, category="Billing and Payments", start=2001)
