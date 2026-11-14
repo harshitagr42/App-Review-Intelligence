@@ -71,6 +71,35 @@ def _exact_name_merge(groups):
     return list(merged_by_norm.values())
 
 
+def embed_texts(texts, model_id=DEFAULT_EMBEDDING_MODEL):
+    """
+    Computes normalized sentence embeddings for input texts using SentenceTransformer on CPU.
+
+    Loads the embedding model lazily and releases it immediately after use.
+
+    Args:
+        texts: Sequence of string texts to encode.
+        model_id: HuggingFace model identifier.
+
+    Returns:
+        np.ndarray: 2D numpy array where each row is a unit vector.
+    """
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer(model_id, device="cpu")
+    try:
+        embeddings = model.encode(
+            texts,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+    finally:
+        del model
+        gc.collect()
+
+    return np.asarray(embeddings, dtype=np.float32)
+
+
 def _semantic_merge(
     groups,
     threshold=DEFAULT_MERGE_SIMILARITY,
@@ -86,7 +115,7 @@ def _semantic_merge(
     descending (ties by name) and having each candidate group join the first
     representative group whose similarity is >= threshold.
 
-    Loads the embedding model lazily and releases it immediately after use.
+    Calls embed_texts through the module global so tests can monkeypatch it.
 
     Args:
         groups: List of group dicts from Step 1.
@@ -111,19 +140,7 @@ def _semantic_merge(
         for g in sorted_groups
     ]
 
-    # Lazy load sentence-transformers on CPU
-    from sentence_transformers import SentenceTransformer
-
-    model = SentenceTransformer(model_id, device="cpu")
-    try:
-        embeddings = model.encode(
-            texts,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )
-    finally:
-        del model
-        gc.collect()
+    embeddings = embed_texts(texts, model_id=model_id)
 
     clusters = []  # list of dicts: {'group': dict, 'embedding': np.ndarray, 'review_ids': list}
 
