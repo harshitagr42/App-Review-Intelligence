@@ -23,7 +23,9 @@ import sys
 PROTECTED_BRANCHES = {"main", "development"}
 ALLOWED_PREFIXES = ("feature/", "fix/", "bug/")
 FORBIDDEN_PATH_RE = re.compile(
-    r"(^|/)(Docs|dataset)(/|$)|(^|/)\.env($|\.)|\.(pem|key|p12|pfx)$"
+    r"(^|/)(Docs|dataset|models)(/|$)"
+    r"|(^|/)\.env($|\.(?!(example|template)$))"
+    r"|\.(pem|key|p12|pfx)$"
 )
 SEGMENT_SPLIT_RE = re.compile(r"&&|\|\||;|\||\n")
 

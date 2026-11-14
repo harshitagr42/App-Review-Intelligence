@@ -10,8 +10,12 @@
       "Bash(git push origin main*)",
       "Bash(git push origin development*)",
       "Bash(gh pr merge *)",
+      "Read(.env)",
       "Edit(.env)",
-      "Read(.env)"
+      "Write(.env)",
+      "Read(**/.env)",
+      "Edit(**/.env)",
+      "Write(**/.env)"
     ]
   },
   "hooks": {
@@ -22,6 +26,17 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_git.py\"",
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_env.py\"",
             "timeout": 15,
             "onFailure": "block"
           }
