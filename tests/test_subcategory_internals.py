@@ -203,6 +203,35 @@ def test_validate_against_batch_flags_all_problem_types():
     assert "missing_ids" in validate_against_batch(p5, ["R1", "R2"], "Performance and Stability")
 
 
+def test_parse_response_drops_empty_review_ids_subcategories():
+    raw = json.dumps({
+        "major_category": "Performance and Stability",
+        "subcategories": [
+            {"subcategory_name": "A", "description": "d", "review_ids": ["R1"]},
+            {"subcategory_name": "EmptyGroup", "description": "d", "review_ids": []},
+        ],
+        "unassigned_review_ids": [],
+    })
+    parsed = parse_response(raw)
+    assert len(parsed["subcategories"]) == 1
+    assert parsed["subcategories"][0]["subcategory_name"] == "A"
+
+
+def test_validate_against_batch_input_not_mutated():
+    parsed = {
+        "major_category": "Performance and Stability",
+        "subcategories": [
+            {"subcategory_name": "A", "description": "d", "review_ids": ["R1"]},
+            {"subcategory_name": "EmptyGroup", "description": "d", "review_ids": []},
+        ],
+        "unassigned_review_ids": [],
+    }
+    parsed_copy = copy.deepcopy(parsed)
+    problems = validate_against_batch(parsed, ["R1"], "Performance and Stability")
+    assert problems == []
+    assert parsed == parsed_copy, "validate_against_batch must not mutate its input dict"
+
+
 def test_validate_against_batch_empty_review_ids_dropped_not_flagged():
     parsed = {
         "major_category": "Performance and Stability",
@@ -214,9 +243,6 @@ def test_validate_against_batch_empty_review_ids_dropped_not_flagged():
     }
     problems = validate_against_batch(parsed, ["R1"], "Performance and Stability")
     assert problems == []
-    # Verify the empty subcategory was dropped
-    assert len(parsed["subcategories"]) == 1
-    assert parsed["subcategories"][0]["subcategory_name"] == "A"
 
 
 def test_repair_cleans_defects_and_preserves_input():

@@ -70,8 +70,10 @@ def parse_response(raw_text):
         if "review_ids" not in sub or not isinstance(sub["review_ids"], list):
             raise ValueError(f"Subcategory at index {index} missing list 'review_ids'")
 
-        # Ensure all review_ids are strings
+        # Ensure all review_ids are strings; drop subcategories with empty review_ids
         cleaned_ids = [str(rid) for rid in sub["review_ids"]]
+        if not cleaned_ids:
+            continue
         parsed_subcategories.append({
             "subcategory_name": sub["subcategory_name"].strip(),
             "description": sub["description"].strip(),
@@ -115,20 +117,17 @@ def validate_against_batch(parsed, batch_ids, expected_category):
     if parsed.get("major_category") != expected_category:
         problems.append("wrong_category")
 
-    # Drop subcategories with empty review_ids list (dropped, not flagged as a problem)
-    if "subcategories" in parsed and isinstance(parsed["subcategories"], list):
-        parsed["subcategories"] = [
-            sub for sub in parsed["subcategories"]
-            if isinstance(sub, dict) and sub.get("review_ids")
-        ]
-
     batch_id_set = set(batch_ids)
     seen_ids = set()
     has_duplicates = False
     has_invented = False
 
     for sub in parsed.get("subcategories", []):
-        for rid in sub.get("review_ids", []):
+        rids = sub.get("review_ids", [])
+        if not rids:
+            # Empty review_ids list inside a subcategory is ignored/dropped, not flagged
+            continue
+        for rid in rids:
             if rid in seen_ids:
                 has_duplicates = True
             seen_ids.add(rid)
