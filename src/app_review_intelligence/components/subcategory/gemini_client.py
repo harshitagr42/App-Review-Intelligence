@@ -154,3 +154,34 @@ def generate_content(
         config=config,
     )
     return response.text
+
+
+def check_model_access(model_id=None, env_var_name=None, timeout_seconds=30):
+    """
+    Minimal safe pre-flight check: fetches the model's metadata from Gemini.
+
+    Sends no review text and no prompt; it only confirms that the API key,
+    network and model ID work before a run starts.
+
+    Raises:
+        ValueError: If the API key environment variable is missing or empty.
+        RuntimeError: If the Gemini API cannot be reached or rejects the request.
+    """
+    env_var_name = env_var_name or os.environ.get("GEMINI_API_KEY_ENV_VAR", DEFAULT_API_KEY_ENV_VAR)
+    check_api_key(env_var_name)
+
+    import google.genai as genai
+    from google.genai import types
+
+    target_model = model_id or DEFAULT_MODEL_ID
+    try:
+        client = genai.Client(
+            api_key=os.environ[env_var_name],
+            http_options=types.HttpOptions(timeout=int(timeout_seconds * 1000)),
+        )
+        client.models.get(model=target_model)
+    except Exception as exc:
+        # The message never contains the key; it names the model and the error type only.
+        raise RuntimeError(
+            f"Gemini API check failed for model '{target_model}': {type(exc).__name__}: {exc}"
+        ) from exc

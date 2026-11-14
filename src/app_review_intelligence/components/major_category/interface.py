@@ -21,7 +21,7 @@ from app_review_intelligence.components.major_category.implementation import (
 )
 
 
-def classify(records):
+def classify(records, config_path=None):
     """
     Predicts one major category for every review.
 
@@ -29,6 +29,7 @@ def classify(records):
         records: list of model-facing review records
             {"review_id", "review_text", "review_date"}. Only review_text is used
             (review_id is just an identifier). Records with gold_* fields are rejected.
+        config_path: optional path to a major_categories.yaml (default: config/).
 
     Returns:
         List (same order as input, one item per review) of
@@ -40,7 +41,7 @@ def classify(records):
             present, or an invalid config/major_categories.yaml.
         FileNotFoundError: config/major_categories.yaml is missing.
     """
-    return classify_reviews(records)
+    return classify_reviews(records, config_path=config_path)
 
 
 def unload_model():

@@ -8,7 +8,9 @@ Example:
 """
 
 from app_review_intelligence.components.sentiment.implementation import (
+    MODEL_NAME,
     predict_sentiments,
+    unload_model as _unload_model,
 )
 
 
@@ -29,3 +31,13 @@ def analyze(records):
         review_id, or empty review_text.
     """
     return predict_sentiments(records)
+
+
+def unload_model():
+    """Frees the sentiment model (call before MiniLM is loaded again; never keep both)."""
+    _unload_model()
+
+
+def model_id():
+    """Returns the sentiment model identifier used by analyze()."""
+    return MODEL_NAME

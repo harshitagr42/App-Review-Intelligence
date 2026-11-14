@@ -91,8 +91,12 @@ def _load_model():
     try:
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+        from app_review_intelligence.model_store.interface import resolve_model_path
+
+        # Loaded from the project's models/ folder (downloaded there on first use).
+        model_path = resolve_model_path(MODEL_NAME)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        model = AutoModelForSequenceClassification.from_pretrained(model_path)
     except Exception as error:
         raise SentimentModelError(
             f"Could not load sentiment model {MODEL_NAME!r}: {error}"
@@ -124,6 +128,21 @@ def unload_model():
 # ---------------------------------------------------------------------------
 # Prediction
 # ---------------------------------------------------------------------------
+
+def normalize_text(text):
+    """Model-card preprocessing: '@name' -> '@user', 'http...' -> 'http'.
+
+    Only usernames and links change; emoji, punctuation and negation are kept.
+    """
+    tokens = []
+    for token in text.split(" "):
+        if token.startswith("@") and len(token) > 1:
+            token = "@user"
+        elif token.startswith("http"):
+            token = "http"
+        tokens.append(token)
+    return " ".join(tokens)
+
 
 def _scores_to_predictions(logits, id2label):
     """Softmax over class logits -> [(label, confidence)] using the top probability."""
@@ -178,7 +197,7 @@ def predict_sentiments(records):
     results = []
     for start in range(0, len(records), BATCH_SIZE):
         batch = records[start:start + BATCH_SIZE]
-        predictions = _classify_batch([record["review_text"] for record in batch])
+        predictions = _classify_batch([normalize_text(record["review_text"]) for record in batch])
         if len(predictions) != len(batch):
             raise SentimentPredictionError(
                 f"Model returned {len(predictions)} predictions for {len(batch)} reviews."

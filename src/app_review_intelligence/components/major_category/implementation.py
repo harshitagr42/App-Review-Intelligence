@@ -146,7 +146,10 @@ def _get_default_embedder(model_name=None):
     if model is None:
         from sentence_transformers import SentenceTransformer
 
-        model = SentenceTransformer(name)
+        from app_review_intelligence.model_store.interface import resolve_model_path
+
+        # Loaded from the project's models/ folder (downloaded there on first use).
+        model = SentenceTransformer(resolve_model_path(name), device="cpu")
         _MODEL_CACHE[name] = model
 
     def embed(texts):
@@ -242,7 +245,7 @@ def _smooth(scores, idx, weights, weight):
     return (1 - weight) * scores + weight * neighbour_scores
 
 
-def classify_reviews(records, embed_fn=None, config=None):
+def classify_reviews(records, embed_fn=None, config=None, config_path=None):
     """
     Predict exactly one major category per review, preserving input order.
 
@@ -251,6 +254,7 @@ def classify_reviews(records, embed_fn=None, config=None):
         embed_fn: optional ``texts -> L2-normalised ndarray`` (used by tests to avoid
             loading the real model). Defaults to MiniLM.
         config: optional dict from ``load_category_config``.
+        config_path: optional path to major_categories.yaml (default: config/).
 
     Returns:
         [{"review_id", "predicted_major_category", "confidence"}]
@@ -261,7 +265,7 @@ def classify_reviews(records, embed_fn=None, config=None):
     if not records:
         return []
 
-    config = config or load_category_config()
+    config = config or load_category_config(config_path)
     other, threshold = config["other_category"], config["min_similarity"]
 
     # Reviews with no usable text cannot match anything -> fallback, zero confidence.

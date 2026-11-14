@@ -86,7 +86,10 @@ def embed_texts(texts, model_id=DEFAULT_EMBEDDING_MODEL):
     """
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer(model_id, device="cpu")
+    from app_review_intelligence.model_store.interface import resolve_model_path
+
+    # Loaded from the project's models/ folder (downloaded there on first use).
+    model = SentenceTransformer(resolve_model_path(model_id), device="cpu")
     try:
         embeddings = model.encode(
             texts,

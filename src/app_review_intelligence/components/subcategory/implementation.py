@@ -20,6 +20,7 @@ from app_review_intelligence.components.subcategory.consolidator import (
     consolidate_subcategories,
 )
 from app_review_intelligence.components.subcategory.gemini_client import (
+    check_model_access,
     DEFAULT_API_KEY_ENV_VAR,
     check_api_key,
     generate_content,
@@ -63,15 +64,15 @@ def _sleep(seconds):
         time.sleep(seconds)
 
 
-def load_category_codes():
+def load_category_codes(config_dir=None):
     """
-    Loads category code mappings from config/major_categories.yaml or defaults.
+    Loads category code mappings from <config_dir>/major_categories.yaml or defaults.
 
     Returns:
         Dict mapping major category name to 3-4 letter code.
     """
-    repo_root = Path(__file__).resolve().parents[4]
-    categories_file = repo_root / "config" / "major_categories.yaml"
+    base = Path(config_dir) if config_dir else Path(__file__).resolve().parents[4] / "config"
+    categories_file = base / "major_categories.yaml"
     if categories_file.is_file():
         try:
             with open(categories_file, encoding="utf-8") as handle:
@@ -95,8 +96,9 @@ def load_settings(config=None):
     Returns:
         Flat dictionary of configuration settings.
     """
-    repo_root = Path(__file__).resolve().parents[4]
-    settings_file = repo_root / "config" / "settings.yaml"
+    config_dir = (config or {}).get("config_dir") if isinstance(config, dict) else None
+    base = Path(config_dir) if config_dir else Path(__file__).resolve().parents[4] / "config"
+    settings_file = base / "settings.yaml"
 
     raw = {}
     if settings_file.is_file():
@@ -179,7 +181,7 @@ def run_discovery(records, config=None):
     """
     # 1. Load settings
     settings = load_settings(config)
-    category_codes = load_category_codes()
+    category_codes = load_category_codes(settings.get("config_dir"))
 
     # 2. Check API key BEFORE doing anything else
     api_key_var = settings.get("api_key_env_var", DEFAULT_API_KEY_ENV_VAR)
