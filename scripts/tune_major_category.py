@@ -1,24 +1,26 @@
-"""Find the best major-category settings (run once, locally; changes no project files).
+"""Find the best major-category settings for all-MiniLM-L6-v2 only (run locally; changes no project files).
 
-For each embedding model it embeds the cleaned dataset once, then tries every combination of:
+It embeds the cleaned dataset once with MiniLM, then tries every combination of:
     * scoring:        max / top2 / centroid
     * unit:           whole review / best sentence
     * smoothing:      off, or blend with the most similar reviews (neighbors, weight)
+    * "Other" bias    (only when config/major_categories.yaml has other_examples)
     * threshold for "Other"
 It uses the real functions from the major_category component, so whatever wins here is exactly
 what classify() will do once the same settings are put in config/major_categories.yaml.
 
-Run from the repo root (first run downloads each model, roughly 100-450 MB):
-    python scripts/tune_major_category.py
-    python scripts/tune_major_category.py --models sentence-transformers/all-MiniLM-L6-v2
-    python scripts/tune_major_category.py --models BAAI/bge-base-en-v1.5 thenlper/gte-base
+Run from the repo root:
+    python scripts/tune_minilm.py
 
 Gold labels are used only to score the results here, never to make predictions.
 Settings are ranked on the even-numbered reviews and re-checked on the odd-numbered ones;
 trust the HELD-OUT column, because it shows whether a gain is real or overfit.
+The "all" column is accuracy over every review, the same number the accuracy test reports,
+so it is the one to compare against the mpnet result.
+
+The full output is also saved to outputs/minilm_tuning.txt (outputs/ is gitignored).
 """
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -30,20 +32,24 @@ sys.path.insert(0, str(ROOT / "src"))
 from app_review_intelligence.adapters.input.interface import load_and_prepare  # noqa: E402
 from app_review_intelligence.components.major_category import implementation as impl  # noqa: E402
 
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 DATASET = ROOT / "dataset" / "processed" / "combined_reviews_output.csv"
-DEFAULT_MODELS = [
-    "sentence-transformers/all-MiniLM-L6-v2",
-    "sentence-transformers/all-mpnet-base-v2",
-    "BAAI/bge-base-en-v1.5",
-]
+RESULT_PATH = ROOT / "outputs" / "minilm_tuning.txt"
+
 THRESHOLDS = [round(t, 3) for t in np.arange(0.20, 0.9001, 0.025)]
 METHODS = ("max", "top2", "centroid")
 UNITS = ("review", "sentence")
 SMOOTHING = (None, (10, 0.5), (10, 0.8), (20, 0.8))
 BIASES = [round(b, 3) for b in np.arange(-0.20, 0.0501, 0.02)]  # only used when "other_examples" is set
 
+HEADER = (
+    f"{'unit':<9}{'scoring':<10}{'smoothing':<12}{'thresh':>7}{'bias':>7}"
+    f"{'tune':>7}{'HELD-OUT':>10}{'all':>7}{'macroF1':>9}{'Other rec':>11}"
+)
+
 
 def metrics(pred, gold, labels):
+    """Return (accuracy, macro F1, recall of the last label, which is "Other")."""
     f1s = []
     for label in labels:
         tp = int(((pred == label) & (gold == label)).sum())
@@ -55,7 +61,8 @@ def metrics(pred, gold, labels):
     return float((pred == gold).mean()), float(np.mean(f1s)), float((pred[other_mask] == labels[-1]).mean())
 
 
-def sweep_model(model_name, texts, gold, names, other, config, tune, hold):
+def sweep(texts, gold, names, other, config, tune, hold):
+    """Try every setting combination. Each row is a dict so the columns cannot get mixed up."""
     n_named = len(names)
     def_texts, owners = [], []
     for i, category in enumerate(config["categories"]):
@@ -69,8 +76,8 @@ def sweep_model(model_name, texts, gold, names, other, config, tune, hold):
     biases = BIASES if other_examples else [0.0]
     owners = np.array(owners)
 
-    print(f"\nEmbedding with {model_name} ...", flush=True)
-    embed = impl._get_default_embedder(model_name)
+    print(f"Embedding with {MODEL_NAME} ...", flush=True)
+    embed = impl._get_default_embedder(MODEL_NAME)
     def_vecs = np.asarray(embed(def_texts), dtype=float)
     review_vecs = np.asarray(embed(texts), dtype=float)
     sentences, starts = [], []
@@ -81,6 +88,8 @@ def sweep_model(model_name, texts, gold, names, other, config, tune, hold):
     starts = np.array(starts)
     neighbor_cache = {k: impl._neighbors(review_vecs, k) for k in {s[0] for s in SMOOTHING if s}}
 
+    labels = names + [other]
+    label_array = np.array(labels)
     rows = []
     for unit in UNITS:
         for method in METHODS:
@@ -96,19 +105,28 @@ def sweep_model(model_name, texts, gold, names, other, config, tune, hold):
                     if other_examples:
                         scores[:, n_named] += bias
                     best, best_score = scores.argmax(axis=1), scores.max(axis=1)
-                    named = np.array(names + [other])[best]
+                    named = label_array[best]
                     for t in THRESHOLDS:
                         pred = np.where((best == n_named) | (best_score < t), other, named)
-                        acc_all, f1_all, other_rec = metrics(pred, gold, names + [other])
-                        rows.append((float((pred[tune] == gold[tune]).mean()), float((pred[hold] == gold[hold]).mean()),
-                                     acc_all, f1_all, other_rec, model_name, unit, method, smooth, t, bias))
-    return rows
+                        acc_all, f1_all, other_rec = metrics(pred, gold, labels)
+                        rows.append({
+                            "tune": float((pred[tune] == gold[tune]).mean()),
+                            "held": float((pred[hold] == gold[hold]).mean()),
+                            "all": acc_all, "f1": f1_all, "other_rec": other_rec,
+                            "unit": unit, "method": method, "smooth": smooth, "t": t, "bias": bias,
+                        })
+    return rows, bool(other_examples)
+
+
+def show(r):
+    smooth = "off" if r["smooth"] is None else f"k{r['smooth'][0]} w{r['smooth'][1]}"
+    return (f"{r['unit']:<9}{r['method']:<10}{smooth:<12}{r['t']:>7.3f}{r['bias']:>7.2f}"
+            f"{r['tune']:>7.3f}{r['held']:>10.3f}{r['all']:>7.3f}{r['f1']:>9.3f}{r['other_rec']:>11.3f}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--models", nargs="+", default=DEFAULT_MODELS)
-    args = parser.parse_args()
+    if not DATASET.exists():
+        sys.exit(f"Dataset not found: {DATASET}\nRun this from the machine that has dataset/processed/.")
 
     records, eval_labels, _ = load_and_prepare([str(DATASET)])
     gold = np.array([l["gold_major_category"] for l in eval_labels])  # evaluation only
@@ -118,45 +136,42 @@ def main():
     tune = np.arange(len(texts)) % 2 == 0
     hold = ~tune
 
-    rows = []
-    for model_name in args.models:
-        rows += sweep_model(model_name, texts, gold, names, other, config, tune, hold)
+    rows, has_other_examples = sweep(texts, gold, names, other, config, tune, hold)
 
-    header = f"{'model':<22}{'unit':<9}{'scoring':<10}{'smoothing':<12}{'thresh':>7}{'bias':>7}{'tune':>7}{'HELD-OUT':>10}{'all':>7}{'macroF1':>9}{'Other rec':>11}"
+    out = []
+    baseline = next(r for r in rows if r["unit"] == "review" and r["method"] == "max"
+                    and r["smooth"] is None and abs(r["t"] - 0.30) < 1e-9 and abs(r["bias"]) < 1e-9)
+    out += [f"MiniLM tuning over {len(texts)} reviews, {len(rows)} setting combinations tried.", "",
+            "Plain baseline (review / max / no smoothing / 0.30):", HEADER, show(baseline), "",
+            "Best threshold/bias for each unit + scoring + smoothing choice, top 8 (ranked on the tuning half):",
+            HEADER]
+    ranked = sorted(rows, key=lambda r: r["tune"], reverse=True)
+    seen, distinct = set(), []
+    for r in ranked:
+        key = (r["unit"], r["method"], r["smooth"])
+        if key not in seen:
+            seen.add(key)
+            distinct.append(r)
+    out += [show(r) for r in distinct[:8]]
 
-    def show(r):
-        smooth = "off" if r[8] is None else f"k{r[8][0]} w{r[8][1]}"
-        return (f"{r[5].split('/')[-1][:21]:<22}{r[6]:<9}{r[7]:<10}{smooth:<12}{r[9]:>7.3f}{r[10]:>7.2f}"
-                f"{r[0]:>7.3f}{r[1]:>10.3f}{r[2]:>7.3f}{r[3]:>9.3f}{r[4]:>11.3f}")
+    best = ranked[0]
+    out += ["", f"Best: held-out accuracy {best['held']:.3f}, accuracy on all reviews {best['all']:.3f} "
+                f"(plain baseline held-out: {baseline['held']:.3f})",
+            "", "To try it, put this in config/major_categories.yaml (replace the matching lines):", "",
+            f"model: {MODEL_NAME}",
+            f"scoring: {best['method']}",
+            f"sentence_level: {'true' if best['unit'] == 'sentence' else 'false'}"]
+    if best["smooth"] is not None:
+        out.append(f"smoothing: {{neighbors: {best['smooth'][0]}, weight: {best['smooth'][1]}}}")
+    out.append(f"min_similarity: {best['t']}")
+    if has_other_examples:
+        out.append(f"other_bias: {best['bias']}")
 
-    first = args.models[0]
-    baseline = next(r for r in rows if r[5] == first and r[6] == "review" and r[7] == "max"
-                    and r[8] is None and abs(r[9] - 0.30) < 1e-9 and abs(r[10]) < 1e-9)
-    print("\nCurrent behaviour (review / max / no smoothing / 0.30):")
-    print(header)
-    print(show(baseline))
-
-    print("\nBest setting per model (ranked on the tuning half):")
-    print(header)
-    for model_name in args.models:
-        print(show(max((r for r in rows if r[5] == model_name), key=lambda r: r[0])))
-
-    print("\nTop 8 overall:")
-    print(header)
-    for r in sorted(rows, key=lambda r: r[0], reverse=True)[:8]:
-        print(show(r))
-
-    best = max(rows, key=lambda r: r[0])
-    print(f"\nBest overall: held-out accuracy {best[1]:.3f} (current behaviour: {baseline[1]:.3f})")
-    print("\nPut this in config/major_categories.yaml (replace the existing min_similarity line):\n")
-    print(f"model: {best[5]}")
-    print(f"scoring: {best[7]}")
-    print(f"sentence_level: {'true' if best[6] == 'sentence' else 'false'}")
-    if best[8] is not None:
-        print(f"smoothing: {{neighbors: {best[8][0]}, weight: {best[8][1]}}}")
-    print(f"min_similarity: {best[9]}")
-    if config.get("other_examples"):
-        print(f"other_bias: {best[10]}")
+    text = "\n".join(out)
+    print("\n" + text)
+    RESULT_PATH.parent.mkdir(exist_ok=True)
+    RESULT_PATH.write_text(text + "\n", encoding="utf-8")
+    print(f"\nSaved to {RESULT_PATH}")
 
 
 if __name__ == "__main__":

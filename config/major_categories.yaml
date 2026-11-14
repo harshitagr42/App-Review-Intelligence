@@ -5,7 +5,7 @@
 
 min_similarity: 0.25       # best score below this -> "Other". Re-tune if you change the model.
 other_category: Other
-model: sentence-transformers/all-mpnet-base-v2
+model: sentence-transformers/all-MiniLM-L6-v2
 scoring: top2
 sentence_level: true
 smoothing: {neighbors: 10, weight: 0.8}
