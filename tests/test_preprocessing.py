@@ -125,3 +125,22 @@ def test_duplicate_review_ids_are_rejected():
 
     with pytest.raises(ValueError):
         preprocess_records([_rec("R1", "a"), _rec("R1", "b")])
+
+
+def test_negation_and_punctuation_are_preserved():
+    preprocess_records = get_component_function(*PRE)
+
+    text = "I don't think it's NOT worth it... can't log in?!"
+    result = preprocess_records([_rec("R1", text)])
+
+    assert result[0]["review_text"] == text
+
+
+def test_input_records_are_not_modified():
+    preprocess_records = get_component_function(*PRE)
+    records = [_rec("R1", "  spaced   text "), _rec("R2", "")]
+    before = [dict(record) for record in records]
+
+    preprocess_records(records)
+
+    assert records == before
