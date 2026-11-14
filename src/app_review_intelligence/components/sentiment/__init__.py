@@ -1,0 +1,1 @@
+"""Sentiment analysis component (Person 3). Import `analyze` from `.interface`."""
