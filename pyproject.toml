@@ -6,10 +6,37 @@ build-backend = "setuptools.build_meta"
 name = "app-review-intelligence"
 version = "0.1.0"
 description = "Local CLI that classifies app reviews and prioritises the issues they raise."
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
+# Primary dependencies fixed by Docs/02_TECHNICAL_REQUIREMENTS.md, section 2.
+# Do not add LangChain, LlamaIndex, a vector DB, a web framework, Docker
+# or a local clustering library.
 dependencies = [
+    # CLI and terminal output
+    "typer>=0.12",
+    "rich>=13.7",
+    # Tabular input (CSV / XLSX)
     "pandas>=2.2",
     "openpyxl>=3.1",
+    # Local models: all-MiniLM-L6-v2 and CardiffNLP sentiment (CPU inference)
+    "sentence-transformers>=3.0",
+    "transformers>=4.44",
+    "torch>=2.6",
+    # Similarity, metrics and numerical work
+    "numpy>=2.1",
+    "scikit-learn>=1.5",
+    "scipy>=1.14",
+    # Configuration
+    "pyyaml>=6.0.2",
+    # Gemini subcategory discovery and bounded retries
+    "google-genai>=1.0",
+    "tenacity>=9.0",
+    # Memory monitoring (peak RSS)
+    "psutil>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
 ]
 
 [tool.setuptools.packages.find]
@@ -20,4 +47,11 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-ra"
+# The real Gemini API is never called by the normal suite
+# (Docs/11_TEST_AND_ACCEPTANCE_PLAN.md, section 1). Run the optional
+# manual smoke test explicitly with:  pytest -m gemini_api
+addopts = "-ra --strict-markers -m 'not gemini_api'"
+markers = [
+    "gemini_api: manual smoke test that calls the real Gemini API (needs GEMINI_API_KEY)",
+    "local_model: test loads a local Hugging Face model (downloads it on first run)",
+]
