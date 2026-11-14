@@ -1,0 +1,24 @@
+Major Category:
+{{MAJOR_CATEGORY}}
+
+Reviews to group:
+{{REVIEWS_JSON}}
+
+Instructions:
+Analyse the reviews above belonging to the major category "{{MAJOR_CATEGORY}}".
+Group recurring issues into specific subcategories. Assign every ID exactly once across all subcategories and unassigned_review_ids.
+Do not invent any review IDs. Do not omit any review IDs.
+
+Return your response in this exact JSON schema:
+{
+  "major_category": "{{MAJOR_CATEGORY}}",
+  "subcategories": [
+    {
+      "subcategory_id": "CODE_001",
+      "subcategory_name": "Issue Name",
+      "description": "One sentence summary.",
+      "review_ids": ["ID_A"]
+    }
+  ],
+  "unassigned_review_ids": []
+}
