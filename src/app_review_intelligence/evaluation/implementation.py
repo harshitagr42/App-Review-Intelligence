@@ -332,71 +332,198 @@ def _build_metadata(
     return metadata
 
 
+def _fmt(value: Any, digits: int = 4) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, float):
+        return f"{value:.{digits}f}" if math.isfinite(value) else "n/a"
+    return str(value)
+
+
+def _classification_lines(title: str, metrics: dict[str, Any]) -> list[str]:
+    lines = [f"## {title}", ""]
+    if metrics.get("status") != "available":
+        return lines + [f"Not available: {metrics.get('reason', 'no eligible reviews')}", ""]
+    macro = metrics.get("macro") or {}
+    weighted = metrics.get("weighted") or {}
+    lines += [
+        f"- Reviews scored: {metrics.get('sample_count')}",
+        f"- Accuracy: {_fmt(metrics.get('accuracy'))}",
+        f"- Macro precision / recall / F1: {_fmt(macro.get('precision'))} / "
+        f"{_fmt(macro.get('recall'))} / {_fmt(metrics.get('macro_f1'))}",
+        f"- Weighted precision / recall / F1: {_fmt(weighted.get('precision'))} / "
+        f"{_fmt(weighted.get('recall'))} / {_fmt(metrics.get('weighted_f1'))}",
+        "",
+        "| Class | Precision | Recall | F1 | Support |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for label, values in (metrics.get("per_class") or {}).items():
+        lines.append(
+            f"| {label} | {_fmt(values.get('precision'))} | {_fmt(values.get('recall'))} "
+            f"| {_fmt(values.get('f1_score'))} | {values.get('support')} |"
+        )
+    matrix = metrics.get("confusion_matrix") or {}
+    labels = matrix.get("labels") or []
+    if labels:
+        lines += ["", "Confusion matrix (rows = gold, columns = predicted):", ""]
+        lines.append("| Gold \\ Predicted | " + " | ".join(str(label) for label in labels) + " |")
+        lines.append("|---|" + "---:|" * len(labels))
+        for label, row in zip(labels, matrix.get("matrix") or []):
+            lines.append(f"| {label} | " + " | ".join(str(cell) for cell in row) + " |")
+    return lines + [""]
+
+
+def _write_exclusive(path: Path, text: str) -> None:
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(text)
+
+
 def _write_evaluation_files(
     result: dict[str, Any],
     output_dir: str | Path,
 ) -> None:
-    """Write evaluation_report.md and strict evaluation.json."""
+    """Write evaluation_report.md and strict evaluation.json (never overwrites)."""
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
 
-    json_path = directory / "evaluation.json"
-    report_path = directory / "evaluation_report.md"
-
-    json_path.write_text(
+    _write_exclusive(
+        directory / "evaluation.json",
         json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False),
-        encoding="utf-8",
     )
 
-    major = result["major_category"]
-    sentiment = result["sentiment"]
-    subcategory = result["subcategory"]
+    meta = result["run_metadata"]
     summary = result["evaluation_summary"]
+    subcategory = result["subcategory"]
     priority = result["priority_analysis"]
+    exclusions = result["exclusions_and_unknown_labels"]
+    excluded_reasons = Counter(
+        str(item.get("reason", "unknown")) for item in exclusions["excluded_records"]
+    )
 
-    lines = [
-        "# Evaluation Report",
+    lines = ["# Evaluation Report", ""]
+    if summary["status"] != "available":
+        lines += [
+            f"> **Status: {summary['status']}.** These results are incomplete and must not be "
+            "read as a full evaluation.",
+            "",
+        ]
+
+    lines += ["## 1. Dataset", ""]
+    for item in meta.get("input_files") or []:
+        if isinstance(item, dict):
+            lines.append(f"- File: {item.get('file_name')} (SHA-256 `{item.get('sha256')}`)")
+    if meta.get("input_file_name"):
+        lines.append(f"- File: {meta['input_file_name']} (SHA-256 `{meta.get('input_sha256')}`)")
+    lines += [
+        f"- Rows read: {_fmt(meta.get('rows_read'))}",
+        f"- Rows accepted (evaluated set): {_fmt(meta.get('rows_accepted', summary['labelled_review_count']))}",
+        f"- Removed, empty review: {_fmt(meta.get('rows_skipped_empty'))}",
+        f"- Removed, empty or invalid date: {_fmt(meta.get('rows_skipped_invalid_date'))}",
+        f"- Removed, duplicate text and date: {_fmt(meta.get('duplicate_review_count'))}",
+        f"- Reviews scored: {summary['evaluated_review_count']} of {summary['labelled_review_count']} labelled",
         "",
-        "## Evaluation Summary",
-        f"- Status: {summary['status']}",
-        f"- Labelled reviews: {summary['labelled_review_count']}",
-        f"- Evaluated reviews: {summary['evaluated_review_count']}",
+        "## 2. Reproducibility",
         "",
-        "## Major Category",
-        f"- Accuracy: {major.get('accuracy')}",
-        f"- Macro F1: {major.get('macro_f1')}",
-        f"- Weighted F1: {major.get('weighted_f1')}",
+        f"- Random seed: {_fmt(meta.get('random_seed', meta.get('seed')))}",
+        f"- Embedding model: `{meta.get('embedding_model_id')}` revision `{_fmt(meta.get('embedding_model_revision'))}`",
+        f"- Sentiment model: `{meta.get('sentiment_model_id')}` revision `{_fmt(meta.get('sentiment_model_revision'))}`",
+        f"- LLM: `{meta.get('llm_model_id')}`",
+        f"- Model IDs: {meta.get('model_ids')}",
         "",
-        "## Sentiment",
-        f"- Accuracy: {sentiment.get('accuracy')}",
-        f"- Macro F1: {sentiment.get('macro_f1')}",
-        f"- Weighted F1: {sentiment.get('weighted_f1')}",
+        "## 3. Exclusions and Unknown Labels",
         "",
-        "## Subcategory Clustering",
-        f"- ARI: {subcategory.get('ari')}",
-        f"- AMI: {subcategory.get('ami')}",
-        f"- NMI: {subcategory.get('nmi')}",
-        f"- V-measure: {subcategory.get('v_measure')}",
-        f"- Coverage: {subcategory.get('coverage')}",
-        f"- Unassigned ratio: {subcategory.get('unassigned_ratio')}",
+        f"- Excluded rows: {exclusions['excluded_record_count']}"
+        + (" (" + ", ".join(f"{reason}: {count}" for reason, count in sorted(excluded_reasons.items())) + ")"
+           if excluded_reasons else ""),
+        f"- Reviews with a missing gold field: {len(exclusions['missing_gold_fields'])}",
+        f"- Unknown gold major classes: {len(exclusions['unknown_labels']['major_category'])}",
+        f"- Unknown gold sentiments: {len(exclusions['unknown_labels']['sentiment'])}",
+        f"- Prediction/label ID mismatches: {summary['mismatch_count']}",
+        "",
+    ]
+    lines += _classification_lines("4. Major Category", result["major_category"])
+
+    lines += ["## 5. Subcategory Clustering", ""]
+    lines += [
+        "Discovered subcategories have no fixed names, so they are compared with gold "
+        "`Minor Class` using clustering agreement metrics. `UNASSIGNED` reviews are excluded "
+        "from these metrics and counted below.",
+        "",
+    ]
+    if subcategory.get("status") == "available":
+        lines += [
+            f"- ARI: {_fmt(subcategory.get('ari'))}",
+            f"- AMI: {_fmt(subcategory.get('ami'))}",
+            f"- NMI: {_fmt(subcategory.get('nmi'))}",
+            f"- V-measure: {_fmt(subcategory.get('v_measure'))}",
+            f"- Homogeneity: {_fmt(subcategory.get('homogeneity'))}",
+            f"- Completeness: {_fmt(subcategory.get('completeness'))}",
+        ]
+    else:
+        lines.append(f"Not available: {subcategory.get('reason', 'no assigned reviews')}")
+    lines += [
         f"- Discovered subcategories: {subcategory.get('discovered_subcategory_count')}",
-        f"- Represented gold minor classes: {subcategory.get('represented_gold_minor_class_count')}",
+        f"- Gold minor classes represented: {subcategory.get('represented_gold_minor_class_count')}",
         "",
-        "## Priority Analysis",
-        priority["limitation"],
+        "Per gold major class:",
         "",
-        "## Exclusions and Unknown Labels",
-        json.dumps(result["exclusions_and_unknown_labels"], indent=2),
+        "| Gold major class | Reviews | Major accuracy | Sentiment accuracy | Subcategory coverage |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for name, values in result["per_major_class"].items():
+        lines.append(
+            f"| {name} | {values['review_count']} | {_fmt(values['major_category_accuracy'])} "
+            f"| {_fmt(values['sentiment_accuracy'])} | {_fmt(values['subcategory_coverage'])} |"
+        )
+    lines.append("")
+    lines += _classification_lines("6. Sentiment", result["sentiment"])
+
+    lines += ["## 7. Priority (descriptive only)", "", priority["limitation"], ""]
+    if priority.get("top_subcategories"):
+        lines += [
+            "| Subcategory | Reviews | Negative share | Score | Level | Severity rules | Trend |",
+            "|---|---:|---:|---:|---|---|---|",
+        ]
+        for item in priority["top_subcategories"]:
+            components = item.get("components") or {}
+            lines.append(
+                f"| {item.get('subcategory_name')} | {item.get('review_count')} "
+                f"| {_fmt(_safe_float(item.get('negative_proportion')), 2)} "
+                f"| {_fmt(_safe_float(item.get('priority_score')), 1)} | {item.get('priority_level')} "
+                f"| {', '.join(map(str, components.get('severity_reason_codes') or [])) or 'none'} "
+                f"| {components.get('trend_status', 'n/a')} |"
+            )
+    else:
+        lines.append("Priority results were not available for this run.")
+    lines.append("")
+
+    durations = meta.get("stage_durations_seconds") or {}
+    lines += [
+        "## 8. Runtime and Resources",
         "",
-        "## Per-Major-Class Breakdown",
-        json.dumps(result["per_major_class"], indent=2),
+        f"- Total runtime (s): {_fmt(meta.get('runtime_seconds'), 2)}",
+        "- Stage durations (s): " + (", ".join(f"{k} {v}" for k, v in durations.items()) or "n/a"),
+        f"- Peak process RSS (MB): {_fmt(meta.get('memory_mb', meta.get('peak_process_rss_mb')), 1)}",
+        f"- Gemini requests: {_fmt(meta.get('api_request_count'))}, retries: {_fmt(meta.get('api_retry_count'))}",
         "",
-        "## Run Metadata",
-        json.dumps(result["run_metadata"], indent=2),
+        "## 9. Failures, Unassigned and Coverage",
+        "",
+        f"- Evaluation status: {summary['status']}",
+        f"- Unassigned reviews: {subcategory.get('unassigned_count')} "
+        f"(ratio {_fmt(subcategory.get('unassigned_ratio'))})",
+        f"- Subcategory coverage: {_fmt(subcategory.get('coverage'))}",
+        "",
+        "## 10. Limitations and Interpretation",
+        "",
+        "- Metrics are computed once over the reviews accepted by preprocessing.",
+        "- Gold labels were used only by the evaluation step, never by a prediction model or Gemini.",
+        "- Subcategory scores are clustering agreement, not accuracy.",
+        "- Priority has no ground truth and is reported descriptively only.",
+        "- Gemini output can vary between runs, so subcategory metrics can vary too.",
         "",
     ]
 
-    report_path.write_text("\n".join(lines), encoding="utf-8")
+    _write_exclusive(directory / "evaluation_report.md", "\n".join(lines))
 
 
 def evaluate_predictions(

@@ -6,11 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 App Review Intelligence is a local Python 3.13 CLI. It reads English app reviews from one or more CSV/XLSX files, and for each review it predicts exactly one major category, a sentiment, and a subcategory that Gemini discovers. It then scores priority per subcategory and writes a Markdown report plus CSV/JSON outputs into a new, unique run folder.
 
-**Implementation is in progress.** Person 1's components (`adapters/input/`, `preprocessing/`) exist; the other components are not written yet, and their tests are skipped. The specification lives in `Docs/`. Start with `Docs/00_READ_ME_FIRST.md`, then read `Docs/writing_block.md`.
+**Implementation is in progress.** Persons 1–4 and 6 are implemented (input, preprocessing, major category, sentiment, subcategory, evaluation, reporting, pipeline, CLI). Person 5's `components/priority/` is not written yet: its tests are skipped and the pipeline skips priority with a warning. The specification lives in `Docs/`. Start with `Docs/00_READ_ME_FIRST.md`, then read `Docs/writing_block.md`.
 
 **`Docs/writing_block.md` is the source of truth.** If another doc in `Docs/` contradicts it, `writing_block.md` wins, and the other doc should be corrected to match.
 
 **Never commit, push or upload `Docs/` or `dataset/`, under any circumstances.** `Docs/` is excluded through `.git/info/exclude` and `dataset/` through `.gitignore`. Before any commit, check that nothing staged is under either folder. Never commit `.env` or API keys either.
+
+**Never read or write `.env`** (it holds the real `GEMINI_API_KEY`); document variables in `.env.example`. Enforced by `.claude/hooks/guard_env.py` and deny rules in `.claude/settings.json`. Tests set `APP_REVIEW_INTELLIGENCE_NO_DOTENV=1` so the CLI ignores `.env`.
 
 ## Commands
 
@@ -21,7 +23,7 @@ pytest tests/test_sentiment.py                # one file
 pytest tests/test_pipeline.py::test_pipeline_rejects_missing_input   # one test
 ```
 
-CI (`.github/workflows/test.yml`) runs `pip install .`, then `pip install pandas pytest`, then `pytest` on Python 3.13. `pyproject.toml` currently holds only pytest settings, so add dependencies there when you introduce them. The planned package manager is `uv`, with a committed `uv.lock`. No linter is configured.
+CI (`.github/workflows/test.yml`) runs `pip install .`, then `pip install pandas pytest`, then `pytest` on Python 3.13. `pyproject.toml` currently holds only pytest settings, so add dependencies there when you introduce them. The package manager is `uv` (`uv sync` from the committed `uv.lock`). Local models live in git-ignored `models/` and are loaded only from there through `model_store/interface.py` (`python inference.py download-models`). No linter is configured.
 
 ## Architecture
 

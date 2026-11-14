@@ -24,6 +24,8 @@ pytestmark = pytest.mark.skipif(not INFERENCE.exists(), reason="inference.py is 
 
 def _run(*args, env=None):
     environment = {k: v for k, v in os.environ.items() if k != "GEMINI_API_KEY"}
+    # Never pick up a real key from the local .env during tests.
+    environment["APP_REVIEW_INTELLIGENCE_NO_DOTENV"] = "1"
     environment.update(env or {})
     return subprocess.run(
         [sys.executable, str(INFERENCE), *args],
