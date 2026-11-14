@@ -336,6 +336,8 @@ def run_discovery(records, config=None):
                             jitter = random.uniform(0.0, 0.5)
                             _sleep(backoff + jitter)
                             continue
+                        else:
+                            break
                     else:
                         logger.error(
                             "Permanent API error on attempt %d for category '%s': %s",
@@ -382,7 +384,7 @@ def run_discovery(records, config=None):
                     last_problem_desc = f"Validation problems: {problems}"
 
                 batch_parsed = parsed
-                retry_hint = build_retry_hint(problems)
+                retry_hint = build_retry_hint(problems, batch_ids=batch_ids)
 
             # When attempts are exhausted:
             if last_failure_type in ("api_error", "bad_json", "wrong_category") or batch_parsed is None:

@@ -61,8 +61,12 @@ def parse_response(raw_text):
             raise ValueError(f"Subcategory item at index {index} is not an object")
         if "subcategory_name" not in sub or not isinstance(sub["subcategory_name"], str):
             raise ValueError(f"Subcategory at index {index} missing string 'subcategory_name'")
+        if not sub["subcategory_name"].strip():
+            raise ValueError(f"Subcategory at index {index} has empty 'subcategory_name'")
         if "description" not in sub or not isinstance(sub["description"], str):
             raise ValueError(f"Subcategory at index {index} missing string 'description'")
+        if not sub["description"].strip():
+            raise ValueError(f"Subcategory at index {index} has empty 'description'")
         if "review_ids" not in sub or not isinstance(sub["review_ids"], list):
             raise ValueError(f"Subcategory at index {index} missing list 'review_ids'")
 
@@ -110,6 +114,13 @@ def validate_against_batch(parsed, batch_ids, expected_category):
     problems = []
     if parsed.get("major_category") != expected_category:
         problems.append("wrong_category")
+
+    # Drop subcategories with empty review_ids list (dropped, not flagged as a problem)
+    if "subcategories" in parsed and isinstance(parsed["subcategories"], list):
+        parsed["subcategories"] = [
+            sub for sub in parsed["subcategories"]
+            if isinstance(sub, dict) and sub.get("review_ids")
+        ]
 
     batch_id_set = set(batch_ids)
     seen_ids = set()

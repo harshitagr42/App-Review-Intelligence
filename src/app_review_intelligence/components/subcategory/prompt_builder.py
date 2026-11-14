@@ -70,24 +70,37 @@ def build_user_prompt(template, major_category, batch_records):
     return prompt
 
 
-def build_retry_hint(problem_summary):
+def build_retry_hint(problem_summary, batch_ids=None):
     """
     Builds a short generic sentence listing what was wrong using only valid batch IDs.
 
     Never echoes unknown or invented strings from an invalid response.
 
     Args:
-        problem_summary: dict or list describing the validation failure,
+        problem_summary: dict or collection describing the validation failure,
             e.g. {'missing_ids': ['R0001', 'R0002']} or list of problem names.
+        batch_ids: Optional sequence of valid batch review IDs to restrict listed IDs to.
 
     Returns:
         A concise retry hint string.
     """
+    allowed_set = set(str(rid) for rid in batch_ids) if batch_ids is not None else None
+
     if isinstance(problem_summary, dict):
+        if allowed_set is None and "batch_ids" in problem_summary:
+            allowed_set = set(str(rid) for rid in problem_summary["batch_ids"])
+
         hints = []
         if "missing_ids" in problem_summary and problem_summary["missing_ids"]:
-            clean_ids = sorted(str(rid) for rid in problem_summary["missing_ids"])
-            hints.append(f"These IDs were missing: {clean_ids}.")
+            raw_missing = problem_summary["missing_ids"]
+            if allowed_set is not None:
+                clean_ids = sorted(str(rid) for rid in raw_missing if str(rid) in allowed_set)
+            else:
+                clean_ids = sorted(str(rid) for rid in raw_missing)
+            if clean_ids:
+                hints.append(f"These IDs were missing: {clean_ids}.")
+            else:
+                hints.append("Some provided review IDs were missing from the response.")
         if "duplicate_ids" in problem_summary and problem_summary["duplicate_ids"]:
             hints.append("Some IDs appeared multiple times across groups.")
         if "invented_ids" in problem_summary and problem_summary["invented_ids"]:
