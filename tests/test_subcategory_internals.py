@@ -861,3 +861,50 @@ def test_real_minilm_clustering_and_similarity_matrix():
     assert sim_0_1 < DEFAULT_MERGE_SIMILARITY
     assert sim_0_2 < DEFAULT_MERGE_SIMILARITY
     assert sim_1_2 < DEFAULT_MERGE_SIMILARITY
+
+
+def test_quota_exhausted_stops_without_retry_and_keeps_partial_results(fake_gemini, monkeypatch):
+    import app_review_intelligence.components.subcategory.implementation as impl
+
+    sleep_calls = []
+    monkeypatch.setattr(impl, "_sleep", sleep_calls.append)
+    records = [
+        {"review_id": f"A{i}", "review_text": f"Login fails {i}.",
+         "predicted_major_category": "Authentication and Account Access"}
+        for i in range(3)
+    ] + [
+        {"review_id": f"P{i}", "review_text": f"App crashes {i}.",
+         "predicted_major_category": "Performance and Stability"}
+        for i in range(3)
+    ]
+    fake_gemini(records)
+    valid_generate = impl.generate_content
+    calls = [0]
+
+    def generate(*args, **kwargs):
+        calls[0] += 1
+        if calls[0] > 1:
+            raise RuntimeError(
+                "429 RESOURCE_EXHAUSTED. Quota exceeded for metric: generate_content_free_tier_requests, "
+                "description: Generate content requests per day limit exceeded on Free Tier."
+            )
+        return valid_generate(*args, **kwargs)
+
+    monkeypatch.setattr(impl, "generate_content", generate)
+
+    result, report = discover_subcategories_with_report(records)
+
+    assert calls[0] == 2  # one success, one quota failure, no retries
+    assert sleep_calls == []
+    assert report["quota_exhausted"] is True
+    assert sorted(report["failed_review_ids"]) == ["P0", "P1", "P2"]
+    by_id = {a["review_id"]: a["subcategory_id"] for a in result["assignments"]}
+    assert [by_id[f"P{i}"] for i in range(3)] == [UNASSIGNED] * 3
+    assert all(by_id[f"A{i}"] != UNASSIGNED for i in range(3))
+
+
+def test_per_minute_rate_limit_is_not_quota_exhausted():
+    from app_review_intelligence.components.subcategory.gemini_client import is_quota_exhausted
+
+    assert not is_quota_exhausted(RuntimeError("429 RESOURCE_EXHAUSTED: requests per minute limit"))
+    assert is_quota_exhausted(RuntimeError("429 RESOURCE_EXHAUSTED quotaId GenerateRequestsPerDayPerProjectPerModel"))

@@ -68,6 +68,8 @@ EXIT_API = 5
 EXIT_EVALUATION = 6
 EXIT_MEMORY = 7
 
+QUOTA_ERROR_CODE = "gemini_quota_exhausted"
+
 STAGE_EXIT_CODES = {
     "input": EXIT_INPUT,
     "major_category": EXIT_MODEL,
@@ -505,8 +507,22 @@ def run_pipeline(input_paths, config: dict[str, Any] | None = None) -> dict[str,
         metadata["api_retry_count"] = subcategory_report.get("retries", 0)
         unassigned_ids = list(subcategory_report.get("unassigned_review_ids") or [])
         metadata["unassigned_review_count"] = len(unassigned_ids)
+        failed_ids = list(subcategory_report.get("failed_review_ids") or [])
+        if subcategory_report.get("quota_exhausted"):
+            message = (
+                f"Gemini quota exhausted: {len(failed_ids)} review(s) were not sent to Gemini "
+                f"and are UNASSIGNED with subcategory_error={QUOTA_ERROR_CODE}"
+            )
+            logger.error("%s. Failed review IDs: %s", message, ", ".join(map(str, failed_ids)))
+            warnings.append(message)
+            metadata["subcategory_error"] = {
+                "code": QUOTA_ERROR_CODE,
+                "message": subcategory_report.get("quota_error"),
+                "failed_review_count": len(failed_ids),
+                "failed_review_ids": failed_ids,
+            }
 
-        # 5. Priority (Person 5). Skipped with a warning while it is not implemented.
+        # 5. Priority (Person 5). Text feeds severity signals, dates feed trend.
         priority_results: list[dict[str, Any]] = []
         with stage("priority"):
             try:
@@ -518,12 +534,15 @@ def run_pipeline(input_paths, config: dict[str, Any] | None = None) -> dict[str,
                 logger.warning(message)
                 warnings.append(message)
             else:
-                priority_results = calculate_priorities(subcategory_result, sentiment_results)
+                priority_results = calculate_priorities(
+                    subcategory_result, sentiment_results,
+                    records=model_records, config=settings.get("priority"),
+                )
                 metadata["priority_available"] = True
 
         classified_reviews = _classified_rows(
             model_records, dataset_metadata, major_by_id, sentiment_results,
-            subcategory_result, priority_results,
+            subcategory_result, priority_results, failed_ids,
         )
 
         result.update({
@@ -576,8 +595,20 @@ def run_pipeline(input_paths, config: dict[str, Any] | None = None) -> dict[str,
                 )
             result["report_path"] = report_path
 
-        metadata["status"] = "completed"
-        logger.info("Run %s completed", folder.name)
+        if metadata.get("subcategory_error"):
+            metadata["status"] = "partial"
+            metadata["error"] = {
+                "stage": "subcategory",
+                "message": metadata["subcategory_error"]["message"],
+                "exit_code": EXIT_API,
+            }
+            logger.error(
+                "Run %s finished with partial subcategory results (%d review(s) not processed)",
+                folder.name, metadata["subcategory_error"]["failed_review_count"],
+            )
+        else:
+            metadata["status"] = "completed"
+            logger.info("Run %s completed", folder.name)
 
     except Exception as error:
         failed_stage = current_stage["name"]
@@ -648,7 +679,7 @@ def _excluded_records(dataset_metadata: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _classified_rows(
     model_records, dataset_metadata, major_by_id, sentiment_results,
-    subcategory_result, priority_results,
+    subcategory_result, priority_results, failed_ids=(),
 ) -> list[dict[str, Any]]:
     """One row per accepted review: source columns + every prediction (no gold labels)."""
     sources = dataset_metadata.get("record_sources") or {}
@@ -661,6 +692,7 @@ def _classified_rows(
         item["subcategory_id"]: item for item in subcategory_result.get("subcategories", [])
     }
     priority_by_id = {item.get("subcategory_id"): item for item in priority_results}
+    failed = set(failed_ids)
 
     rows = []
     for record in model_records:
@@ -685,5 +717,6 @@ def _classified_rows(
             "sentiment_confidence": sentiment.get("confidence"),
             "priority_score": priority.get("priority_score"),
             "priority_level": priority.get("priority_level"),
+            "subcategory_error": QUOTA_ERROR_CODE if review_id in failed else "",
         })
     return rows

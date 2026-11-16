@@ -76,14 +76,15 @@ def test_priority_weights_and_bands():
     assert priority["trend"]["minimum_reviews_per_window"] == 5
 
 
-def test_priority_severity_levels():
+def test_priority_severity_scores_per_major_category():
     severity = _load(SETTINGS)["priority"]["severity"]
+    scores = severity["category_scores"]
+    names = {item["name"] for item in _load(CATEGORIES)["categories"]}
 
-    assert {level: severity[level]["score"] for level in ("critical", "high", "medium", "low")} == {
-        "critical": 100, "high": 75, "medium": 50, "low": 25,
-    }
-    for level in severity.values():
-        assert level["phrases"], "every severity level needs at least one phrase"
+    assert set(scores) == names
+    assert set(scores.values()) <= {25, 50, 75, 100}
+    assert severity["default_score"] in {25, 50, 75, 100}
+    assert scores["Authentication and Account Access"] > scores["User Interface and Experience"]
 
 
 # ---------------------------------------------------------------------------

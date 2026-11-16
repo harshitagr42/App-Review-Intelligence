@@ -43,6 +43,7 @@ CSV_FIELDS = [
     "sentiment_confidence",
     "priority_score",
     "priority_level",
+    "subcategory_error",
 ]
 
 MODEL_ATTRIBUTION = [

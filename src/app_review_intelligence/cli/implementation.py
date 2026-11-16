@@ -308,6 +308,7 @@ def run(
         "run", input, allow_cloud_processing, text_column, id_column, date_column, sheet,
         config_dir, output_dir, quiet, verbose,
     )
+    _exit_if_partial(result)
     typer.echo("Pipeline completed successfully.")
     typer.echo(f"Run folder: {result['run_folder']}")
     typer.echo(f"Report: {result['report_path']}")
@@ -343,12 +344,29 @@ def evaluate(
         "evaluate", input, allow_cloud_processing, text_column, id_column, date_column, sheet,
         config_dir, output_dir, quiet, verbose, seed=seed,
     )
+    _exit_if_partial(result)
     status = result.get("evaluation_results", {}).get("evaluation_summary", {}).get("status")
     typer.echo("Evaluation completed successfully.")
     typer.echo(f"Evaluation folder: {result['run_folder']}")
     typer.echo(f"Evaluation status: {status}")
     if status != "available":
         raise typer.Exit(code=EXIT_EVALUATION)
+
+
+def _exit_if_partial(result) -> None:
+    """Outputs are written, but Gemini stopped early: report it and exit with code 5."""
+    metadata = result.get("run_metadata") or {}
+    error = metadata.get("subcategory_error")
+    if metadata.get("status") != "partial" or not error:
+        return
+    typer.echo(
+        f"Error: Gemini quota exhausted; {error['failed_review_count']} review(s) were not "
+        f"assigned a subcategory (marked {error['code']}).", err=True,
+    )
+    typer.echo(f"Partial outputs written to: {result['run_folder']}", err=True)
+    if result.get("report_path"):
+        typer.echo(f"Report: {result['report_path']}", err=True)
+    raise typer.Exit(code=EXIT_API)
 
 
 def _evaluate_existing_run(

@@ -129,15 +129,6 @@ service-account*.json
 # =========================
 
 # Never commit real datasets
-data/raw/*
-!data/raw/.gitkeep
-
-data/processed/*
-!data/processed/.gitkeep
-
-data/evaluation/*
-!data/evaluation/.gitkeep
-
 datasets/
 dataset/
 private_data/

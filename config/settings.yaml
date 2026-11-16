@@ -66,36 +66,27 @@ priority:
     high: 60
     medium: 35
 
+  # Trend formula: windows end at the latest review date in the run.
+  # growth = (recent - previous) / previous; T = clamp(50 + 50 * growth, 0, 100).
+  # T is unavailable (weight redistributed to V/N/S) if either window has too few reviews.
   trend:
     recent_window_days: 30
     previous_window_days: 30
     minimum_reviews_per_window: 5
 
+  # Severity (S) comes from the predicted major category of the subcategory.
+  # Allowed values: 100 (critical), 75 (high), 50 (medium), 25 (low).
+  # Categories not listed get default_score.
   severity:
-    critical:
-      score: 100
-      phrases:
-        - account compromised
-        - data breach
-        - money taken without authorisation
-        - charged without authorisation
-        - permanent data loss
-    high:
-      score: 75
-      phrases:
-        - cannot complete payment
-        - cannot log in
-        - refund never received
-        - account inaccessible
-    medium:
-      score: 50
-      phrases:
-        - app keeps crashing
-        - subscription will not cancel
-        - feature not working
-    low:
-      score: 25
-      phrases:
-        - layout is confusing
-        - button is misplaced
-        - text is too small
+    default_score: 25
+    category_scores:
+      Authentication and Account Access: 100
+      Billing and Payments: 100
+      Privacy and Security: 100
+      Performance and Stability: 75
+      Features and Functionality: 75
+      Compatibility: 50
+      Customer Support: 50
+      User Interface and Experience: 25
+      Notifications: 25
+      Other: 25

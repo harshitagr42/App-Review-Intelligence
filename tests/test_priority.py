@@ -232,3 +232,19 @@ def test_priorities_are_deterministic_and_inputs_unchanged():
     assert first == second
     assert subcategories == subcategories_before
     assert sentiments == sentiments_before
+
+
+def test_severity_comes_from_major_category():
+    calculate_priorities = get_component_function(*CALCULATE)
+    subcategories, sentiments = _build([
+        ("AUTH_001", "Authentication and Account Access", _reviews("a", negative=2)),
+        ("UIUX_001", "User Interface and Experience", _reviews("b", negative=2)),
+    ])
+    config = {"severity": {"default_score": 25, "category_scores": {
+        "Authentication and Account Access": 100, "User Interface and Experience": 25}}}
+
+    results = _by_id(calculate_priorities(subcategories, sentiments, config=config))
+
+    assert results["AUTH_001"]["components"]["severity"] == 100
+    assert results["UIUX_001"]["components"]["severity"] == 25
+    assert results["AUTH_001"]["priority_score"] > results["UIUX_001"]["priority_score"]

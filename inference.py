@@ -1,5 +1,11 @@
 """App Review Intelligence entry point: `python inference.py --help`."""
 
+"""
+for demo run the following command 
+source .venv/bin/activate
+python inference.py run --input dataset/processed/demo_reviews_500.csv --allow-cloud-processing
+"""
+
 import sys
 from pathlib import Path
 

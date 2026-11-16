@@ -24,6 +24,7 @@ from app_review_intelligence.components.subcategory.gemini_client import (
     DEFAULT_API_KEY_ENV_VAR,
     check_api_key,
     generate_content,
+    is_quota_exhausted,
     is_transient_error,
 )
 from app_review_intelligence.components.subcategory.prompt_builder import (
@@ -142,6 +143,12 @@ def load_settings(config=None):
                 settings[key] = value
 
     return settings
+
+
+def _short_error(exc, limit=300):
+    """One-line, length-capped error text (Gemini quota errors are very long)."""
+    text = " ".join(str(exc).split())
+    return text if len(text) <= limit else text[:limit] + "..."
 
 
 def _format_batch_ids_for_error(batch_ids):
@@ -266,6 +273,8 @@ def run_discovery(records, config=None):
     total_retries = 0
     all_repaired = []
     unassigned_ids = set()
+    quota_error = None          # set once the Gemini quota is exhausted
+    quota_failed_ids = []       # reviews never processed because of it
 
     raw_subcategories_by_category = {cat: [] for cat in grouped_by_category}
 
@@ -281,8 +290,11 @@ def run_discovery(records, config=None):
         ]
 
         for batch_index, batch in enumerate(batches):
-            total_batches += 1
             batch_ids = [r["review_id"] for r in batch]
+            if quota_error is not None:
+                quota_failed_ids.extend(batch_ids)
+                continue
+            total_batches += 1
             logger.info(
                 "Processing category '%s' batch %d/%d (%d reviews)",
                 cat,
@@ -323,6 +335,15 @@ def run_discovery(records, config=None):
                         seed=random_seed,
                     )
                 except Exception as exc:
+                    if is_quota_exhausted(exc):
+                        quota_error = _short_error(exc)
+                        last_failure_type = "quota_exhausted"
+                        logger.error(
+                            "Gemini quota exhausted (category '%s', batch %d/%d); "
+                            "stopping API calls without retrying: %s",
+                            cat, batch_index + 1, len(batches), quota_error,
+                        )
+                        break
                     if is_transient_error(exc):
                         transient_failures += 1
                         last_failure_type = "api_error"
@@ -387,6 +408,10 @@ def run_discovery(records, config=None):
 
                 batch_parsed = parsed
                 retry_hint = build_retry_hint(problems, batch_ids=batch_ids)
+
+            if last_failure_type == "quota_exhausted":
+                quota_failed_ids.extend(batch_ids)
+                continue
 
             # When attempts are exhausted:
             if last_failure_type in ("api_error", "bad_json", "wrong_category") or batch_parsed is None:
@@ -479,6 +504,9 @@ def run_discovery(records, config=None):
         "merges": total_merges,
         "model_id": settings["model_id"],
         "categories": category_counts,
+        "quota_exhausted": quota_error is not None,
+        "quota_error": quota_error,
+        "failed_review_ids": list(quota_failed_ids),
     }
 
     return result, report

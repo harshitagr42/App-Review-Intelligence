@@ -26,6 +26,19 @@ def check_api_key(env_var_name=DEFAULT_API_KEY_ENV_VAR):
         raise ValueError(f"Environment variable '{env_var_name}' is not set or empty.")
 
 
+def is_quota_exhausted(exception):
+    """
+    True when Gemini reports an exhausted request quota (daily/plan limit).
+
+    Retrying cannot help, so the caller stops calling the API. Short per-minute
+    rate limits are not treated as exhausted quota and stay retryable.
+    """
+    msg = str(exception).lower()
+    if "quota" not in msg and "resource_exhausted" not in msg and "resource exhausted" not in msg:
+        return False
+    return any(marker in msg for marker in ("perday", "per day", "check your plan", "billing"))
+
+
 def is_transient_error(exception):
     """
     Determines whether an exception represents a transient API error.

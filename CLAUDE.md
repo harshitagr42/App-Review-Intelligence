@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 App Review Intelligence is a local Python 3.13 CLI. It reads English app reviews from one or more CSV/XLSX files, and for each review it predicts exactly one major category, a sentiment, and a subcategory that Gemini discovers. It then scores priority per subcategory and writes a Markdown report plus CSV/JSON outputs into a new, unique run folder.
 
-**Implementation is in progress.** Persons 1–4 and 6 are implemented (input, preprocessing, major category, sentiment, subcategory, evaluation, reporting, pipeline, CLI). Person 5's `components/priority/` is not written yet: its tests are skipped and the pipeline skips priority with a warning. The specification lives in `Docs/`. Start with `Docs/00_READ_ME_FIRST.md`, then read `Docs/writing_block.md`.
+All six persons' components are implemented (input, preprocessing, major category, sentiment, subcategory, priority, evaluation, reporting, pipeline, CLI). `calculate_priorities` also takes optional `records=` (dates for trend) and `config=`; the pipeline passes both. Severity is a fixed score per major category (`priority.severity.category_scores` in `settings.yaml`), not phrase matching. When the Gemini daily quota is hit, subcategory discovery stops without retrying, keeps the batches already done, marks the rest `UNASSIGNED` with `subcategory_error`, and the run finishes with status `partial` and exit code 5. The specification lives in `Docs/`. Start with `Docs/00_READ_ME_FIRST.md`, then read `Docs/writing_block.md`.
 
 **`Docs/writing_block.md` is the source of truth.** If another doc in `Docs/` contradicts it, `writing_block.md` wins, and the other doc should be corrected to match.
 
